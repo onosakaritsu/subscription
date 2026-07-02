@@ -4,7 +4,9 @@ const billingCycles = [
   ["weekly", "每周"],
   ["monthly", "每月"],
   ["quarterly", "每季度"],
-  ["yearly", "每年"]
+  ["semiannual", "每半年"],
+  ["yearly", "每年"],
+  ["oneTime", "一次性"]
 ];
 
 const currencySymbols = {
@@ -14,6 +16,16 @@ const currencySymbols = {
   HKD: "HK$",
   JPY: "¥",
   GBP: "£"
+};
+
+const statusClass = {
+  disabled: "is-disabled",
+  overdue: "is-overdue",
+  today: "is-today",
+  within3Days: "is-soon",
+  within7Days: "is-watch",
+  thisMonth: "is-month",
+  normal: "is-normal"
 };
 
 const state = {
@@ -29,11 +41,13 @@ const state = {
 
 const els = {
   statusText: document.querySelector("#statusText"),
-  totalCount: document.querySelector("#totalCount"),
+  thisMonthCount: document.querySelector("#thisMonthCount"),
+  within7Count: document.querySelector("#within7Count"),
   enabledCount: document.querySelector("#enabledCount"),
   disabledCount: document.querySelector("#disabledCount"),
   monthlySummary: document.querySelector("#monthlySummary"),
-  nextRenewalSummary: document.querySelector("#nextRenewalSummary"),
+  yearlySummary: document.querySelector("#yearlySummary"),
+  upcomingSummaryList: document.querySelector("#upcomingSummaryList"),
   subscriptionList: document.querySelector("#subscriptionList"),
   emptyList: document.querySelector("#emptyList"),
   form: document.querySelector("#subscriptionForm"),
@@ -130,6 +144,7 @@ async function loadSubscriptions(selectId = state.selectedId) {
 function renderAll() {
   renderSummary();
   renderList();
+  renderUpcomingSummary();
 
   if (state.selectedId) {
     const item = state.items.find((entry) => entry.id === state.selectedId);
@@ -140,19 +155,35 @@ function renderAll() {
 }
 
 function renderSummary() {
-  const summary = state.summary || { total: 0, enabled: 0, disabled: 0, monthlyByCurrency: {}, upcoming: [] };
-  els.totalCount.textContent = summary.total;
-  els.enabledCount.textContent = summary.enabled;
-  els.disabledCount.textContent = summary.disabled;
-  els.statusText.textContent = summary.total ? `管理 ${summary.total} 项订阅` : "本地 JSON 存储已就绪";
+  const summary = state.summary || emptySummary();
+  els.thisMonthCount.textContent = summary.thisMonthRenewalCount || 0;
+  els.within7Count.textContent = summary.within7DaysRenewalCount || 0;
+  els.enabledCount.textContent = summary.enabled || 0;
+  els.disabledCount.textContent = summary.disabled || 0;
+  els.statusText.textContent = summary.total ? "管理 " + summary.total + " 项订阅" : "本地 JSON 存储已就绪";
+  els.monthlySummary.innerHTML = formatCurrencyTotals(summary.monthlyByCurrency);
+  els.yearlySummary.innerHTML = formatCurrencyTotals(summary.yearlyByCurrency);
+}
 
-  const monthlyParts = Object.entries(summary.monthlyByCurrency).map(([currency, amount]) => (
-    `${formatMoney(amount, currency)}`
-  ));
-  els.monthlySummary.textContent = monthlyParts.length ? monthlyParts.join(" / ") : "暂无启用订阅";
+function renderUpcomingSummary() {
+  const items = state.summary?.urgentUpcoming || [];
+  if (!items.length) {
+    els.upcomingSummaryList.innerHTML = '<div class="empty-state compact"><strong>暂无近期续费</strong><span>7 日内没有需要处理的启用订阅。</span></div>';
+    return;
+  }
 
-  const next = summary.upcoming?.[0];
-  els.nextRenewalSummary.textContent = next ? `${next.name} · ${formatDate(next.nextRenewalDate)}` : "暂无";
+  els.upcomingSummaryList.innerHTML = "";
+  for (const item of items.slice(0, 5)) {
+    const row = document.createElement("div");
+    row.className = "upcoming-item";
+    row.innerHTML = [
+      '<span class="status-badge ', statusClassFor(item), '">', escapeHTML(item.renewalStatus.label), '</span>',
+      '<strong>', escapeHTML(item.name || "未命名订阅"), '</strong>',
+      '<span>', escapeHTML(formatDate(item.nextRenewalDate)), ' · ', escapeHTML(item.renewalStatusText), '</span>',
+      '<span class="amount-text">', escapeHTML(formatMoney(item.amount, item.currency)), '</span>'
+    ].join("");
+    els.upcomingSummaryList.append(row);
+  }
 }
 
 function renderList() {
@@ -165,17 +196,20 @@ function renderList() {
     button.type = "button";
     button.className = "subscription-row";
     button.setAttribute("aria-selected", String(item.id === state.selectedId));
-    button.innerHTML = `
-      <span class="row-flag ${item.isEnabled ? "" : "disabled"}"></span>
-      <span class="row-main">
-        <strong>${escapeHTML(item.name || "未命名订阅")}</strong>
-        <span>${escapeHTML(item.category)} · ${escapeHTML(formatMoney(item.amount, item.currency))} · ${escapeHTML(cycleLabel(item.billingCycle))} · ${item.isEnabled ? "启用" : "停用"}</span>
-      </span>
-      <span class="row-date">
-        <span>续费</span>
-        <strong>${escapeHTML(formatDate(item.nextRenewalDate))}</strong>
-      </span>
-    `;
+    button.innerHTML = [
+      '<span class="row-flag ', item.isEnabled ? "" : "disabled", '"></span>',
+      '<span class="row-main">',
+        '<span class="row-title-line">',
+          '<strong>', escapeHTML(item.name || "未命名订阅"), '</strong>',
+          '<span class="status-badge ', statusClassFor(item), '">', escapeHTML(item.renewalStatus?.label || "正常"), '</span>',
+        '</span>',
+        '<span class="row-meta">', escapeHTML(item.category), ' · ', escapeHTML(formatMoney(item.amount, item.currency)), ' · ', escapeHTML(cycleLabel(item.billingCycle)), '</span>',
+      '</span>',
+      '<span class="row-date">',
+        '<span>', escapeHTML(item.renewalStatusText || "续费"), '</span>',
+        '<strong>', escapeHTML(formatDate(item.nextRenewalDate)), '</strong>',
+      '</span>'
+    ].join("");
     button.addEventListener("click", () => {
       state.selectedId = item.id;
       fillForm(item);
@@ -200,7 +234,7 @@ function filteredItems() {
       return true;
     }
 
-    const haystack = `${item.name} ${item.notes} ${item.category}`.toLowerCase();
+    const haystack = (item.name + " " + item.notes + " " + item.category).toLowerCase();
     return haystack.includes(state.filters.search);
   });
 }
@@ -208,7 +242,7 @@ function filteredItems() {
 function fillForm(item) {
   state.selectedId = item.id;
   els.formTitle.textContent = "编辑订阅";
-  els.formHint.textContent = `${formatMoney(item.amount, item.currency)} · ${cycleLabel(item.billingCycle)}`;
+  els.formHint.textContent = formatMoney(item.amount, item.currency) + " · " + cycleLabel(item.billingCycle) + " · " + (item.renewalStatus?.label || "正常");
   els.nameInput.value = item.name;
   els.categoryInput.value = item.category;
   els.amountInput.value = item.amount;
@@ -223,7 +257,7 @@ function fillForm(item) {
 }
 
 function setBlankForm() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
   state.selectedId = null;
   els.formTitle.textContent = "新增订阅";
   els.formHint.textContent = "填写订阅信息后保存。";
@@ -242,7 +276,7 @@ function setBlankForm() {
 async function saveForm(event) {
   event.preventDefault();
   const payload = formPayload();
-  const path = state.selectedId ? `/api/subscriptions/${encodeURIComponent(state.selectedId)}` : "/api/subscriptions";
+  const path = state.selectedId ? "/api/subscriptions/" + encodeURIComponent(state.selectedId) : "/api/subscriptions";
   const method = state.selectedId ? "PUT" : "POST";
   const result = await api(path, {
     method,
@@ -258,11 +292,11 @@ async function deleteSelected() {
     return;
   }
   const item = state.items.find((entry) => entry.id === state.selectedId);
-  if (!confirm(`删除「${item?.name || "此订阅"}」？`)) {
+  if (!confirm("删除「" + (item?.name || "此订阅") + "」？")) {
     return;
   }
 
-  await api(`/api/subscriptions/${encodeURIComponent(state.selectedId)}`, { method: "DELETE" });
+  await api("/api/subscriptions/" + encodeURIComponent(state.selectedId), { method: "DELETE" });
   showToast("已删除订阅");
   setBlankForm();
   await loadSubscriptions(null);
@@ -289,8 +323,10 @@ async function exportJSON() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "subscriptions.json";
+  link.download = exportFileName();
+  document.body.append(link);
   link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }
 
@@ -308,7 +344,7 @@ async function importJSON() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(json)
     });
-    showToast(`已导入 ${result.items.length} 项订阅`);
+    showToast("已导入 " + result.items.length + " 项订阅");
     await loadSubscriptions(result.items[0]?.id ?? null);
   } finally {
     els.importInput.value = "";
@@ -327,7 +363,7 @@ async function api(path, options = {}) {
 
 function fillSelect(select, options) {
   select.innerHTML = options.map(([value, label]) => (
-    `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`
+    '<option value="' + escapeHTML(value) + '">' + escapeHTML(label) + '</option>'
   )).join("");
 }
 
@@ -335,9 +371,12 @@ function calculateNextRenewalDate(startDate, cycle) {
   if (!startDate) {
     return "";
   }
+  if (cycle === "oneTime") {
+    return startDate;
+  }
 
   let candidate = addCycle(startDate, cycle);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateISO();
   while (candidate < today) {
     candidate = addCycle(candidate, cycle);
   }
@@ -352,6 +391,9 @@ function addCycle(dateISO, cycle) {
   }
   if (cycle === "quarterly") {
     return addMonths(dateISO, 3);
+  }
+  if (cycle === "semiannual") {
+    return addMonths(dateISO, 6);
   }
   if (cycle === "yearly") {
     return addMonths(dateISO, 12);
@@ -372,6 +414,10 @@ function parseLocalDate(value) {
   return new Date(year, month - 1, day);
 }
 
+function localDateISO(date = new Date()) {
+  return toISODate(date);
+}
+
 function toISODate(date) {
   return [
     date.getFullYear(),
@@ -380,14 +426,28 @@ function toISODate(date) {
   ].join("-");
 }
 
+function exportFileName(date = new Date()) {
+  return "subscriptions-backup-" + localDateISO(date) + ".json";
+}
+
 function cycleLabel(value) {
   return billingCycles.find(([cycle]) => cycle === value)?.[1] || value;
 }
 
+function formatCurrencyTotals(totals = {}) {
+  const entries = Object.entries(totals);
+  if (!entries.length) {
+    return '<span class="muted-value">暂无</span>';
+  }
+  return entries.map(([currency, amount]) => (
+    '<span class="currency-line">' + escapeHTML(currency + " " + Number(amount || 0).toFixed(2)) + '</span>'
+  )).join("");
+}
+
 function formatMoney(amount, currency) {
-  return `${currencySymbols[currency] || ""}${Number(amount || 0).toLocaleString("zh-CN", {
+  return (currencySymbols[currency] || "") + Number(amount || 0).toLocaleString("zh-CN", {
     maximumFractionDigits: 2
-  })} ${currency}`;
+  }) + " " + currency;
 }
 
 function formatDate(value) {
@@ -395,7 +455,24 @@ function formatDate(value) {
     return "--";
   }
   const [, month, day] = value.split("-");
-  return `${month}/${day}`;
+  return month + "/" + day;
+}
+
+function statusClassFor(item) {
+  return statusClass[item.renewalStatus?.key] || "is-normal";
+}
+
+function emptySummary() {
+  return {
+    total: 0,
+    enabled: 0,
+    disabled: 0,
+    thisMonthRenewalCount: 0,
+    within7DaysRenewalCount: 0,
+    monthlyByCurrency: {},
+    yearlyByCurrency: {},
+    urgentUpcoming: []
+  };
 }
 
 function escapeHTML(value) {

@@ -18,17 +18,29 @@
         </header>
 
         <section class="metrics" aria-label="订阅概览">
-          <div class="metric">
-            <span>全部</span>
-            <strong id="totalCount">0</strong>
+          <div class="metric priority">
+            <span>本月需续费</span>
+            <strong id="thisMonthCount">0</strong>
+          </div>
+          <div class="metric priority">
+            <span>7日内续费</span>
+            <strong id="within7Count">0</strong>
           </div>
           <div class="metric">
-            <span>启用</span>
+            <span>启用订阅</span>
             <strong id="enabledCount">0</strong>
           </div>
           <div class="metric">
-            <span>停用</span>
+            <span>停用订阅</span>
             <strong id="disabledCount">0</strong>
+          </div>
+          <div class="metric amount-card">
+            <span>月度折算</span>
+            <strong id="monthlySummary">暂无</strong>
+          </div>
+          <div class="metric amount-card">
+            <span>年度折算</span>
+            <strong id="yearlySummary">暂无</strong>
           </div>
         </section>
 
@@ -46,7 +58,7 @@
           <div id="subscriptionList" class="subscription-list"></div>
           <div id="emptyList" class="empty-state hidden">
             <strong>暂无订阅</strong>
-            <span>新增后会在这里按续费日期排序。</span>
+            <span>新增后会在这里按续费状态和日期排序。</span>
           </div>
         </section>
       </aside>
@@ -66,15 +78,14 @@
           </div>
         </header>
 
-        <section class="summary-band" aria-label="月度折算">
-          <div>
-            <span>月度折算</span>
-            <strong id="monthlySummary">暂无启用订阅</strong>
+        <section class="renewal-summary" aria-label="最近续费摘要">
+          <div class="section-heading">
+            <div>
+              <h3>最近续费</h3>
+              <p>优先显示已过期、今日续费和 7 日内续费。</p>
+            </div>
           </div>
-          <div>
-            <span>最近续费</span>
-            <strong id="nextRenewalSummary">暂无</strong>
-          </div>
+          <div id="upcomingSummaryList" class="upcoming-summary-list"></div>
         </section>
 
         <form id="subscriptionForm" class="editor-form">

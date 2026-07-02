@@ -1,61 +1,62 @@
-# Subscription Manager Web
+# 订阅管理 Web App
 
-A local-first subscription manager web app with a zero-dependency Node.js backend, static frontend, and JSON file storage.
+本项目是一个本地优先的个人订阅管理 Web App，用于记录、统计和提醒软件、会员、云服务、AI 工具等周期性订阅。
 
-This project was migrated from an earlier macOS SwiftUI / WidgetKit direction. The current open-source version is a pure web application, so it does not require Apple Development Team, App Group, signing certificates, or native macOS widgets.
+当前项目已从早期 macOS SwiftUI / WidgetKit 方向迁移为纯网页应用。它不需要 Apple Development Team，不使用 App Group / WidgetKit，也不依赖原生 macOS 小组件。
 
-## Features
+English documentation: [README.en.md](README.en.md)
 
-- Add, edit, and delete subscriptions.
-- Track name, category, amount, currency, billing cycle, start date, next renewal date, enabled state, and notes.
-- Automatically calculate the next renewal date from start date and billing cycle.
-- Manually override the next renewal date when needed.
-- Keep disabled subscriptions visible in the management list.
-- Search subscriptions by name, category, or notes.
-- Filter by category and enabled/disabled state.
-- Show summary metrics for total, enabled, disabled, nearest renewal, and monthly-equivalent spend by currency.
-- Import and export subscription data as JSON.
-- Store data locally in a readable JSON file.
-- Run without installing third-party dependencies.
+## 功能特性
 
-## Tech Stack
+- 新增、编辑、删除订阅。
+- 记录订阅名称、分类、金额、币种、计费周期、开始日期、下次续费日、启用状态和备注。
+- 根据开始日期和计费周期自动计算下次续费日。
+- 支持手动指定下次续费日。
+- 自动计算续费状态：已过期、今日续费、3 日内、7 日内、本月内、正常、已停用。
+- 列表默认按启用优先、续费日期从近到远排序；停用订阅固定在底部。
+- 搜索、分类筛选、启用/停用筛选。
+- 首页统计卡片：本月需续费数量、7 日内续费数量、启用数、停用数、月度折算金额、年度折算金额。
+- 多币种分别统计，不做自动汇率换算。
+- 最近续费摘要优先显示已过期、今日续费、3 日内和 7 日内的启用订阅。
+- JSON 导入/导出。
+- 每次成功保存后自动生成本地备份，最多保留最近 20 份。
+- 页面适合像桌面侧边小工具一样长期打开，支持 420px～600px 窄窗口。
 
-- Backend: Node.js native HTTP server
-- Frontend: HTML, CSS, and browser JavaScript
-- Storage: local JSON file
-- Tests: Node.js built-in test runner
+## 当前技术栈
 
-## Why This Stack
+- Node.js 原生 HTTP 后端
+- 静态 HTML/CSS/JS 前端
+- 本地 JSON 存储
+- 不依赖数据库
+- 不依赖第三方框架
+- 不需要 Apple Development Team
+- 不使用 WidgetKit
 
-The project is designed for a local-first, easy-to-run workflow:
+## 环境要求
 
-- No Apple Developer account or signing setup is required.
-- No external npm packages are required.
-- Data remains inspectable and portable.
-- The codebase stays small enough for straightforward maintenance.
-- Future upgrades to SQLite, React/Vite, Tauri, or Electron remain possible.
+- Node.js 20 或更新版本
 
-## Requirements
+## 本地启动
 
-- Node.js 20 or newer
-
-## Quick Start
+方式一：使用 npm
 
 ```bash
-git clone https://github.com/onosakaritsu/subscription.git
-cd subscription
-npm run dev
+npm start
 ```
 
-Open:
+方式二：使用一键启动脚本
+
+```bash
+./start-subscription-manager.sh
+```
+
+访问地址：
 
 ```text
 http://127.0.0.1:5173
 ```
 
-## Configuration
-
-Optional environment variables:
+可选环境变量：
 
 ```bash
 HOST=127.0.0.1
@@ -63,33 +64,68 @@ PORT=5173
 SUBSCRIPTIONS_DATA_FILE=./data/subscriptions.json
 ```
 
-You can copy `.env.example` as a reference. The app does not load `.env` automatically; pass variables through your shell when needed:
+示例：
 
 ```bash
-PORT=8080 npm run dev
+PORT=8080 npm start
 ```
 
-## Testing
+## 数据文件位置
 
-```bash
-npm test
-```
-
-## Data Storage
-
-By default, subscription data is stored at:
+主数据文件：
 
 ```text
 data/subscriptions.json
 ```
 
-The file is ignored by Git to prevent personal subscription data from being committed. The server creates it automatically when needed.
+该文件会保存你的真实订阅数据，并已被 Git 忽略，不会提交到开源仓库。
+
+## 自动备份
+
+备份目录：
+
+```text
+data/backups/
+```
+
+规则：
+
+- 每次成功保存订阅数据后自动生成一份备份。
+- 备份文件名格式：`subscriptions-backup-YYYY-MM-DD-HH-mm-ss.json`。
+- 最多保留最近 20 份备份。
+- 超过 20 份时自动删除最旧备份。
+- 如果备份失败，不影响主数据保存；服务端会输出错误日志。
+- 真实备份 JSON 文件已被 Git 忽略。
+
+## JSON 导入导出
+
+- 点击页面右上角“导出”会下载当前订阅 JSON。
+- 默认导出文件名：`subscriptions-backup-YYYY-MM-DD.json`。
+- 点击“导入”可以选择之前导出的 JSON 文件。
+- 导入接口要求 JSON 内容为订阅数组；导入会替换当前本地数据。
+
+## 金额折算规则
+
+不做自动汇率换算，多币种分别统计。
+
+- 月付：月度金额 = 原金额；年度金额 = 原金额 × 12
+- 季付：月度金额 = 原金额 ÷ 3；年度金额 = 原金额 × 4
+- 半年付：月度金额 = 原金额 ÷ 6；年度金额 = 原金额 × 2
+- 年付：月度金额 = 原金额 ÷ 12；年度金额 = 原金额
+- 一次性：不计入周期性月度/年度折算，单独作为一次性支出统计
+- 每周：保留兼容旧数据，按 52 周折算年度金额
+
+## 测试
+
+```bash
+npm test
+```
 
 ## API
 
-See [docs/API.md](docs/API.md).
+详见 [docs/API.md](docs/API.md)。
 
-Main endpoints:
+主要接口：
 
 - `GET /api/health`
 - `GET /api/subscriptions`
@@ -99,33 +135,29 @@ Main endpoints:
 - `GET /api/export`
 - `POST /api/import`
 
-## Architecture
+## 目录结构
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- `src/server.mjs`：HTTP 服务、API 路由、静态资源服务、本地 JSON 持久化
+- `src/domain/subscriptions.mjs`：订阅领域逻辑、状态计算、排序、统计
+- `src/storage/backups.mjs`：本地自动备份与保留策略
+- `public/`：浏览器界面
+- `data/subscriptions.json`：本地订阅数据文件
+- `data/backups/`：自动备份目录
+- `tests/`：Node.js 内置测试
 
-Core files:
+## 当前不做的内容
 
-- `src/server.mjs`: HTTP server, API routing, static file serving, JSON persistence
-- `src/domain/subscriptions.mjs`: normalization, renewal calculation, sorting, summaries
-- `public/`: browser UI
-- `tests/`: domain tests
+- 登录系统
+- 多用户权限
+- 数据库
+- 云同步
+- 原生 macOS Widget
+- Electron 打包
+- 自动汇率换算
 
-## Roadmap
+## 开源与贡献
 
-- Optional local backup and restore workflow.
-- SQLite storage adapter for larger datasets.
-- Renewal reminders through browser notifications or calendar export.
-- Charts for monthly and yearly spending trends.
-- Optional packaged desktop app through Tauri or Electron.
-
-## Contributing
-
-Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Security
-
-Please do not publish real personal subscription data. See [SECURITY.md](SECURITY.md).
-
-## License
-
-MIT License. See [LICENSE](LICENSE).
+- 许可证：[MIT](LICENSE)
+- 贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全说明：[SECURITY.md](SECURITY.md)
+- 架构说明：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)

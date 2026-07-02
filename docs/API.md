@@ -20,7 +20,12 @@ Returns:
 
 `GET /api/subscriptions`
 
-Returns all subscriptions sorted for management, plus summary metrics.
+Returns all subscriptions sorted for management, plus summary metrics. Items include derived renewal status fields:
+
+- `renewalStatus.key`
+- `renewalStatus.label`
+- `renewalStatus.daysUntilRenewal`
+- `renewalStatusText`
 
 ## Create Subscription
 
@@ -43,6 +48,15 @@ JSON body:
 }
 ```
 
+Supported billing cycles:
+
+- `weekly`
+- `monthly`
+- `quarterly`
+- `semiannual`
+- `yearly`
+- `oneTime`
+
 ## Update Subscription
 
 `PUT /api/subscriptions/:id`
@@ -57,10 +71,14 @@ Uses the same JSON shape as create.
 
 `GET /api/export`
 
-Downloads all subscriptions as JSON.
+Downloads all subscriptions as JSON. The download filename is:
+
+```text
+subscriptions-backup-YYYY-MM-DD.json
+```
 
 ## Import
 
 `POST /api/import`
 
-Body must be an array of subscription objects. Existing local data is replaced.
+Body must be an array of subscription objects. Existing local data is replaced. A successful import triggers an automatic backup.

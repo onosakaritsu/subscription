@@ -6,4 +6,5 @@ coverage/
 dist/
 tmp/
 data/subscriptions.json
+data/backups/*.json
 .DS_Store

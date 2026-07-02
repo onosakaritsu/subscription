@@ -3,10 +3,12 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, stat, writeFile, mkdir } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
+import { createDataBackup } from "./storage/backups.mjs";
 import {
   normalizeSubscription,
   sortForManagement,
-  summarizeSubscriptions
+  summarizeSubscriptions,
+  exportSubscriptionFileName
 } from "./domain/subscriptions.mjs";
 
 const projectRoot = resolve(new URL("..", import.meta.url).pathname);
@@ -119,7 +121,7 @@ async function routeAPI(request, response, url, context) {
     const items = await loadItems(context.dataFile);
     response.writeHead(200, {
       "Content-Type": "application/json; charset=utf-8",
-      "Content-Disposition": "attachment; filename=\"subscriptions.json\""
+      "Content-Disposition": `attachment; filename="${exportSubscriptionFileName()}"`
     });
     response.end(JSON.stringify(items, null, 2));
     return;
@@ -160,9 +162,16 @@ async function loadItems(dataFile) {
 
 async function saveItems(dataFile, items) {
   await mkdir(resolve(dataFile, ".."), { recursive: true });
+  const cleanItems = sortForManagement(items).map(stripDerivedFields);
   const tempFile = `${dataFile}.${process.pid}.tmp`;
-  await writeFile(tempFile, `${JSON.stringify(sortForManagement(items), null, 2)}\n`, "utf8");
+  await writeFile(tempFile, `${JSON.stringify(cleanItems, null, 2)}\n`, "utf8");
   await rename(tempFile, dataFile);
+
+  try {
+    await createDataBackup(dataFile, cleanItems);
+  } catch (error) {
+    console.error(`Failed to create subscription data backup: ${error.message}`);
+  }
 }
 
 async function readJSONBody(request) {
@@ -218,6 +227,12 @@ async function serveStatic(request, response, url, publicDir) {
     throw error;
   }
 }
+
+function stripDerivedFields(item) {
+  const { renewalStatus, renewalStatusText, ...cleanItem } = item;
+  return cleanItem;
+}
+
 
 function sendJSON(response, statusCode, body) {
   response.writeHead(statusCode, {
