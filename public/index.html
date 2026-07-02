@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>订阅管理</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <header class="brand">
+          <div>
+            <h1>订阅管理</h1>
+            <p id="statusText">正在载入数据</p>
+          </div>
+          <button id="newButton" class="icon-button primary" type="button" aria-label="新增订阅" title="新增订阅">+</button>
+        </header>
+
+        <section class="metrics" aria-label="订阅概览">
+          <div class="metric">
+            <span>全部</span>
+            <strong id="totalCount">0</strong>
+          </div>
+          <div class="metric">
+            <span>启用</span>
+            <strong id="enabledCount">0</strong>
+          </div>
+          <div class="metric">
+            <span>停用</span>
+            <strong id="disabledCount">0</strong>
+          </div>
+        </section>
+
+        <section class="filters" aria-label="筛选">
+          <input id="searchInput" type="search" placeholder="搜索名称或备注">
+          <select id="categoryFilter" aria-label="分类筛选"></select>
+          <select id="enabledFilter" aria-label="状态筛选">
+            <option value="all">全部状态</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+        </section>
+
+        <section class="list-panel" aria-label="订阅列表">
+          <div id="subscriptionList" class="subscription-list"></div>
+          <div id="emptyList" class="empty-state hidden">
+            <strong>暂无订阅</strong>
+            <span>新增后会在这里按续费日期排序。</span>
+          </div>
+        </section>
+      </aside>
+
+      <section class="detail">
+        <header class="toolbar">
+          <div>
+            <h2 id="formTitle">新增订阅</h2>
+            <p id="formHint">填写订阅信息后保存。</p>
+          </div>
+          <div class="toolbar-actions">
+            <button id="exportButton" class="secondary" type="button">导出</button>
+            <label class="secondary file-button">
+              导入
+              <input id="importInput" type="file" accept="application/json">
+            </label>
+          </div>
+        </header>
+
+        <section class="summary-band" aria-label="月度折算">
+          <div>
+            <span>月度折算</span>
+            <strong id="monthlySummary">暂无启用订阅</strong>
+          </div>
+          <div>
+            <span>最近续费</span>
+            <strong id="nextRenewalSummary">暂无</strong>
+          </div>
+        </section>
+
+        <form id="subscriptionForm" class="editor-form">
+          <div class="form-grid">
+            <label>
+              <span>订阅名称</span>
+              <input id="nameInput" name="name" required placeholder="例如 iCloud+、Netflix、Notion">
+            </label>
+
+            <label>
+              <span>分类</span>
+              <select id="categoryInput" name="category"></select>
+            </label>
+
+            <label>
+              <span>金额</span>
+              <input id="amountInput" name="amount" type="number" min="0" step="0.01" placeholder="0.00">
+            </label>
+
+            <label>
+              <span>币种</span>
+              <select id="currencyInput" name="currency"></select>
+            </label>
+
+            <label>
+              <span>计费周期</span>
+              <select id="billingCycleInput" name="billingCycle"></select>
+            </label>
+
+            <label>
+              <span>开始日期</span>
+              <input id="startDateInput" name="startDate" type="date" required>
+            </label>
+
+            <label>
+              <span>下次续费日</span>
+              <input id="nextRenewalInput" name="nextRenewalDate" type="date" required>
+            </label>
+
+            <label class="check-row">
+              <input id="manualRenewalInput" name="manualRenewal" type="checkbox">
+              <span>手动指定续费日</span>
+            </label>
+
+            <label class="check-row">
+              <input id="enabledInput" name="enabled" type="checkbox" checked>
+              <span>启用此订阅</span>
+            </label>
+          </div>
+
+          <label class="notes-field">
+            <span>备注</span>
+            <textarea id="notesInput" name="notes" rows="5" placeholder="可记录账号、套餐、取消入口等信息"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button id="deleteButton" class="danger hidden" type="button">删除</button>
+            <button id="resetButton" class="secondary" type="button">清空</button>
+            <button class="primary text-button" type="submit">保存</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

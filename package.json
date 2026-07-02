@@ -1,0 +1,31 @@
+{
+  "name": "subscription-manager-web",
+  "version": "2.0.0",
+  "private": false,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.mjs",
+    "start": "node src/server.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "description": "Local-first subscription manager web app with JSON storage.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/onosakaritsu/subscription.git"
+  },
+  "bugs": {
+    "url": "https://github.com/onosakaritsu/subscription/issues"
+  },
+  "homepage": "https://github.com/onosakaritsu/subscription#readme",
+  "keywords": [
+    "subscription",
+    "subscription-manager",
+    "local-first",
+    "json-storage",
+    "nodejs"
+  ]
+}
