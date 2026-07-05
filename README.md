@@ -20,6 +20,9 @@
 - 最近续费摘要优先显示已过期、今日续费、3 日内和 7 日内的启用订阅。
 - JSON 导入/导出。
 - 每次成功保存后自动生成本地备份，最多保留最近 20 份。
+- 支持在页面中查看、预览和恢复本地备份。
+- 恢复备份前会自动创建恢复前备份，导入 JSON 前也会保护当前数据。
+- 轻量续费日历视图，展示本月和下月即将续费的启用订阅。
 - 页面适合像桌面侧边小工具一样长期打开，支持 420px～600px 窄窗口。
 
 ## 当前技术栈
@@ -40,6 +43,7 @@ GitHub 默认显示中文版 `README.md`。除许可证原文、代码标识、A
 - 中文安全说明：[SECURITY.md](SECURITY.md)
 - 中文架构说明：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - 英文 README：[README.en.md](README.en.md)
+
 ## 环境要求
 
 - Node.js 20 或更新版本
@@ -103,6 +107,10 @@ data/backups/
 - 最多保留最近 20 份备份。
 - 超过 20 份时自动删除最旧备份。
 - 如果备份失败，不影响主数据保存；服务端会输出错误日志。
+- 页面“备份与恢复”区域可以列出、预览和恢复备份。
+- 恢复前会自动创建 `subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json`。
+- 导入 JSON 前会自动创建 `subscriptions-before-import-YYYY-MM-DD-HH-mm-ss.json`。
+- 损坏备份会显示为不可恢复，不会阻断备份列表读取。
 - 真实备份 JSON 文件已被 Git 忽略。
 
 ## JSON 导入导出
@@ -111,6 +119,12 @@ data/backups/
 - 默认导出文件名：`subscriptions-backup-YYYY-MM-DD.json`。
 - 点击“导入”可以选择之前导出的 JSON 文件。
 - 导入接口要求 JSON 内容为订阅数组；导入会替换当前本地数据。
+- 导入前会先校验 JSON 格式和订阅数据结构；失败时不会覆盖当前数据。
+- 导入成功后会刷新订阅列表、统计卡片、续费日历和备份列表。
+
+## 续费日历视图
+
+页面会按“本月续费”和“下月续费”展示启用订阅，每条显示日期、订阅名称、状态、金额和币种。已过期项目继续保留在最近续费摘要中，不强行放入日历。
 
 ## 金额折算规则
 
@@ -142,6 +156,9 @@ npm test
 - `DELETE /api/subscriptions/:id`
 - `GET /api/export`
 - `POST /api/import`
+- `GET /api/backups`
+- `GET /api/backups/:fileName`
+- `POST /api/backups/:fileName/restore`
 
 ## 目录结构
 

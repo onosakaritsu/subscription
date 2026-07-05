@@ -88,6 +88,24 @@
           <div id="upcomingSummaryList" class="upcoming-summary-list"></div>
         </section>
 
+        <section class="calendar-panel" aria-label="续费日历视图">
+          <div class="section-heading">
+            <div>
+              <h3>续费日历</h3>
+              <p>轻量展示本月和下月的启用订阅。</p>
+            </div>
+          </div>
+          <div class="calendar-grid">
+            <div class="calendar-group">
+              <h4>本月续费</h4>
+              <div id="renewalCalendarCurrent" class="calendar-list"></div>
+            </div>
+            <div class="calendar-group">
+              <h4>下月续费</h4>
+              <div id="renewalCalendarNext" class="calendar-list"></div>
+            </div>
+          </div>
+        </section>
         <form id="subscriptionForm" class="editor-form">
           <div class="form-grid">
             <label>
@@ -147,6 +165,21 @@
             <button class="primary text-button" type="submit">保存</button>
           </div>
         </form>
+        <section class="backup-panel" aria-label="备份与恢复">
+          <div class="section-heading">
+            <div>
+              <h3>备份与恢复</h3>
+              <p>查看本地自动备份，预览后可恢复。</p>
+            </div>
+            <button id="refreshBackupsButton" class="secondary" type="button">刷新</button>
+          </div>
+          <div id="backupList" class="backup-list"></div>
+          <div id="emptyBackups" class="empty-state compact hidden">
+            <strong>暂无备份</strong>
+            <span>保存、导入或恢复订阅后会自动生成备份。</span>
+          </div>
+          <div id="backupPreview" class="backup-preview hidden"></div>
+        </section>
       </section>
     </main>
 
