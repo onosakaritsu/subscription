@@ -30,6 +30,21 @@ export const currencySymbols = {
   GBP: "£"
 };
 
+export const statusMeta = {
+  overdue: { statusKey: "overdue", label: "已过期", tone: "danger", priority: 100, description: "续费日期早于今天" },
+  today: { statusKey: "today", label: "今日续费", tone: "danger", priority: 95, description: "今天需要续费" },
+  within3Days: { statusKey: "within3Days", label: "3日内", tone: "warning", priority: 90, description: "距离续费还有 1 到 3 天" },
+  within7Days: { statusKey: "within7Days", label: "7日内", tone: "caution", priority: 80, description: "距离续费还有 4 到 7 天" },
+  thisMonth: { statusKey: "thisMonth", label: "本月内", tone: "info", priority: 60, description: "本月内会续费" },
+  normal: { statusKey: "normal", label: "正常", tone: "success", priority: 30, description: "启用中，近期无续费压力" },
+  disabled: { statusKey: "disabled", label: "已停用", tone: "muted", priority: 10, description: "已停用，不参与提醒" },
+  oneTime: { statusKey: "oneTime", label: "一次性", tone: "purple", priority: 20, description: "一次性项目，不参与周期折算" }
+};
+
+export function getStatusMeta(statusOrKey) {
+  const key = typeof statusOrKey === "string" ? statusOrKey : statusOrKey?.key;
+  return statusMeta[key] || statusMeta.normal;
+}
 export const renewalStatusLabels = {
   disabled: "已停用",
   overdue: "已过期",
@@ -37,7 +52,8 @@ export const renewalStatusLabels = {
   within3Days: "3日内",
   within7Days: "7日内",
   thisMonth: "本月内",
-  normal: "正常"
+  normal: "正常",
+  oneTime: "一次性"
 };
 
 export function todayISO(referenceDate = new Date()) {
@@ -45,7 +61,7 @@ export function todayISO(referenceDate = new Date()) {
 }
 
 export function exportSubscriptionFileName(now = new Date()) {
-  return `subscriptions-backup-${todayISO(now)}.json`;
+  return `subscriptions-export-${todayISO(now)}.json`;
 }
 
 export function dateToISO(date) {
@@ -124,8 +140,15 @@ export function normalizeSubscription(input, existing = null, now = new Date()) 
   }
 
   const category = categories.includes(input.category) ? input.category : "其他";
-  const currency = currencies.includes(input.currency) ? input.currency : "CNY";
-  const billingCycle = billingCycles.includes(input.billingCycle) ? input.billingCycle : "monthly";
+  const currency = String(input.currency ?? "").trim().toUpperCase();
+  if (!currencies.includes(currency)) {
+    throw new Error("币种不符合要求");
+  }
+
+  const billingCycle = input.billingCycle;
+  if (!billingCycles.includes(billingCycle)) {
+    throw new Error("计费周期不符合要求");
+  }
   const startDate = input.startDate || todayISO(now);
   parseISODate(startDate);
 
@@ -151,7 +174,7 @@ export function normalizeSubscription(input, existing = null, now = new Date()) 
     billingCycle,
     startDate,
     nextRenewalDate,
-    isEnabled: input.isEnabled !== false,
+    isEnabled: typeof input.isActive === "boolean" ? input.isActive : input.isEnabled !== false,
     notes: String(input.notes ?? "").trim(),
     isRenewalDateManuallyAdjusted,
     createdAt: existing?.createdAt ?? input.createdAt ?? now.toISOString(),
@@ -165,6 +188,9 @@ export function renewalStatus(item, referenceDate = todayISO()) {
   }
 
   const daysUntilRenewal = daysBetween(referenceDate, item.nextRenewalDate);
+  if (item.billingCycle === "oneTime") {
+    return statusResult("oneTime", daysUntilRenewal);
+  }
   if (daysUntilRenewal < 0) {
     return statusResult("overdue", daysUntilRenewal);
   }
@@ -241,7 +267,7 @@ export function urgentRenewals(items, limit = 5, referenceDate = todayISO()) {
   ]);
 
   return sortForManagement(items, referenceDate)
-    .filter((item) => item.isEnabled && urgentOrder.has(item.renewalStatus.key))
+    .filter((item) => item.isEnabled && item.billingCycle !== "oneTime" && urgentOrder.has(item.renewalStatus.key))
     .sort((a, b) => {
       const statusDelta = urgentOrder.get(a.renewalStatus.key) - urgentOrder.get(b.renewalStatus.key);
       if (statusDelta !== 0) {
@@ -281,6 +307,60 @@ export function renewalCalendarGroups(items, referenceDate = todayISO()) {
   }
 
   return groups;
+}
+export function renewSubscription(item, referenceDate = todayISO(), now = new Date()) {
+  if (item.billingCycle === "oneTime") {
+    throw new Error("一次性项目不能确认续费");
+  }
+
+  let nextRenewalDate = addCycle(item.nextRenewalDate, item.billingCycle);
+  while (nextRenewalDate <= referenceDate) {
+    nextRenewalDate = addCycle(nextRenewalDate, item.billingCycle);
+  }
+
+  return normalizeSubscription({
+    ...item,
+    nextRenewalDate,
+    isRenewalDateManuallyAdjusted: true
+  }, item, now);
+}
+
+export function copySubscriptionDraft(item) {
+  const { id, createdAt, updatedAt, renewalStatus, renewalStatusText, ...draft } = item;
+  return {
+    ...draft,
+    name: `${item.name || "未命名订阅"} 副本`
+  };
+}
+
+export function filterAndSortSubscriptions(items, options = {}, referenceDate = todayISO()) {
+  const search = String(options.search || "").trim().toLowerCase();
+  const category = options.category || "all";
+  const enabled = options.enabled || "all";
+  const status = options.status || "all";
+  const currency = options.currency || "all";
+  const sort = options.sort || "default";
+
+  const filtered = sortForManagement(items, referenceDate).filter((item) => {
+    if (category !== "all" && item.category !== category) return false;
+    if (enabled === "enabled" && !item.isEnabled) return false;
+    if (enabled === "disabled" && item.isEnabled) return false;
+    if (status !== "all" && item.renewalStatus.key !== status) return false;
+    if (currency !== "all" && item.currency !== currency) return false;
+    if (!search) return true;
+    return [item.name, item.category, item.notes, item.currency].join(" ").toLowerCase().includes(search);
+  });
+
+  return filtered.sort((a, b) => compareSubscriptions(a, b, sort));
+}
+
+function compareSubscriptions(a, b, sort) {
+  if (sort === "renewal-desc") return b.nextRenewalDate.localeCompare(a.nextRenewalDate) || a.name.localeCompare(b.name, "zh-Hans-CN");
+  if (sort === "amount-desc") return Number(b.amount || 0) - Number(a.amount || 0) || a.name.localeCompare(b.name, "zh-Hans-CN");
+  if (sort === "amount-asc") return Number(a.amount || 0) - Number(b.amount || 0) || a.name.localeCompare(b.name, "zh-Hans-CN");
+  if (sort === "name-asc") return a.name.localeCompare(b.name, "zh-Hans-CN");
+  if (sort === "updated-desc") return String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")) || a.name.localeCompare(b.name, "zh-Hans-CN");
+  return 0;
 }
 export function monthlyEquivalent(item) {
   const amount = Number(item.amount || 0);
@@ -352,6 +432,9 @@ export function summarizeSubscriptions(items, referenceDate = todayISO()) {
     total: items.length,
     enabled: enabled.length,
     disabled: items.length - enabled.length,
+    overdueCount: enabled.filter((item) => item.renewalStatus.key === "overdue").length,
+    todayRenewalCount: enabled.filter((item) => item.renewalStatus.key === "today").length,
+    oneTimeCount: enabled.filter((item) => item.renewalStatus.key === "oneTime").length,
     thisMonthRenewalCount: thisMonthRenewals.length,
     within7DaysRenewalCount: within7DaysRenewals.length,
     upcoming: upcomingRenewals(items, 5, referenceDate),
@@ -364,11 +447,14 @@ export function summarizeSubscriptions(items, referenceDate = todayISO()) {
 }
 
 function statusResult(key, daysUntilRenewal) {
+  const meta = getStatusMeta(key);
   return {
     key,
-    label: renewalStatusLabels[key],
+    label: meta.label,
+    tone: meta.tone,
+    description: meta.description,
     daysUntilRenewal,
-    priority: statusPriority(key)
+    priority: meta.priority
   };
 }
 

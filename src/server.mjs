@@ -2,17 +2,20 @@ import { createServer as createHttpServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, stat, writeFile, mkdir } from "node:fs/promises";
 import { createReadStream } from "node:fs";
-import { extname, join, normalize, resolve } from "node:path";
+import { basename, extname, join, normalize, resolve } from "node:path";
 import {
   backupDirectoryFor,
   createBeforeImportBackup,
   createBeforeRestoreBackup,
   createDataBackup,
+  createManualBackup,
   listBackupFiles,
+  readBackupDownload,
   readBackupFile
 } from "./storage/backups.mjs";
 import {
   normalizeSubscription,
+  renewSubscription,
   sortForManagement,
   summarizeSubscriptions,
   exportSubscriptionFileName
@@ -92,6 +95,26 @@ async function routeAPI(request, response, url, context) {
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/backups") {
+    const result = await createManualBackupForDataFile(context.dataFile);
+    sendJSON(response, 201, result);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/backups/restore-uploaded") {
+    const textBody = await readTextBody(request);
+    const result = await restoreUploadedBackupToDataFile(context.dataFile, textBody);
+    sendJSON(response, 200, result);
+    return;
+  }
+
+  const downloadMatch = url.pathname.match(/^\/api\/backups\/([^/]+)\/download$/);
+  if (downloadMatch && request.method === "GET") {
+    const fileName = decodeURIComponent(downloadMatch[1]);
+    await sendBackupDownload(response, context.dataFile, fileName);
+    return;
+  }
+
   const backupMatch = url.pathname.match(/^\/api\/backups\/([^/]+)$/);
   if (backupMatch && request.method === "GET") {
     const fileName = decodeURIComponent(backupMatch[1]);
@@ -118,6 +141,22 @@ async function routeAPI(request, response, url, context) {
   }
 
   const itemMatch = url.pathname.match(/^\/api\/subscriptions\/([^/]+)$/);
+  if (itemMatch && request.method === "PATCH") {
+    const id = decodeURIComponent(itemMatch[1]);
+    const body = await readJSONBody(request);
+    const result = await updateSubscriptionEnabled(context.dataFile, id, body.isEnabled);
+    sendJSON(response, 200, result);
+    return;
+  }
+
+  const renewMatch = url.pathname.match(/^\/api\/subscriptions\/([^/]+)\/renew$/);
+  if (renewMatch && request.method === "POST") {
+    const id = decodeURIComponent(renewMatch[1]);
+    const result = await renewSubscriptionById(context.dataFile, id);
+    sendJSON(response, 200, result);
+    return;
+  }
+
   if (itemMatch && request.method === "PUT") {
     const id = decodeURIComponent(itemMatch[1]);
     const body = await readJSONBody(request);
@@ -167,6 +206,83 @@ async function routeAPI(request, response, url, context) {
   throw httpError(404, "接口不存在");
 }
 
+export async function createManualBackupForDataFile(dataFile, options = {}) {
+  const items = await loadItems(dataFile);
+  const backupPath = await createManualBackup(dataFile, stripAllDerivedFields(items), options);
+  const backup = await readBackupFile(backupDirectoryFor(dataFile), basename(backupPath));
+  return {
+    fileName: backup.fileName,
+    createdAt: backup.createdAt,
+    type: backup.type,
+    size: backup.size,
+    subscriptionCount: backup.subscriptionCount,
+    isValid: true
+  };
+}
+
+export async function sendBackupDownload(response, dataFile, fileName) {
+  let backup;
+  try {
+    backup = await readBackupDownload(backupDirectoryFor(dataFile), fileName);
+  } catch (error) {
+    throw backupHttpError(error);
+  }
+
+  response.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${backup.fileName}"`,
+    "Cache-Control": "no-store"
+  });
+  response.end(backup.content);
+}
+
+export async function restoreUploadedBackupToDataFile(dataFile, textBody, options = {}) {
+  const parsed = parseImportJSON(textBody);
+  const restoredItems = validateSubscriptionArray(parsed, options.now);
+  const currentItems = await loadItems(dataFile);
+  const beforeRestoreBackup = await createBeforeRestoreBackup(dataFile, stripAllDerivedFields(currentItems), options);
+  await saveItems(dataFile, restoredItems);
+  console.log("Restored subscription data from uploaded backup");
+  return {
+    ok: true,
+    restoredCount: restoredItems.length,
+    beforeRestoreBackupFileName: basename(beforeRestoreBackup),
+    items: sortForManagement(restoredItems),
+    summary: summarizeSubscriptions(restoredItems)
+  };
+}
+
+export async function updateSubscriptionEnabled(dataFile, id, isEnabled, now = new Date()) {
+  if (typeof isEnabled !== "boolean") {
+    throw httpError(400, "启用状态必须是布尔值");
+  }
+  const items = await loadItems(dataFile);
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) {
+    throw httpError(404, "订阅不存在");
+  }
+  const item = normalizeSubscription({ ...items[index], isEnabled }, items[index], now);
+  items[index] = item;
+  await saveItems(dataFile, items);
+  return { item, items: sortForManagement(items), summary: summarizeSubscriptions(items) };
+}
+
+export async function renewSubscriptionById(dataFile, id, referenceDate, now = new Date()) {
+  const items = await loadItems(dataFile);
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) {
+    throw httpError(404, "订阅不存在");
+  }
+  let item;
+  try {
+    item = renewSubscription(items[index], referenceDate, now);
+  } catch (error) {
+    throw httpError(400, error.message);
+  }
+  items[index] = item;
+  await saveItems(dataFile, items);
+  return { item, items: sortForManagement(items), summary: summarizeSubscriptions(items) };
+}
 export async function getBackupPreview(dataFile, fileName) {
   try {
     const preview = await readBackupFile(backupDirectoryFor(dataFile), fileName);
@@ -197,7 +313,7 @@ export async function restoreBackupToDataFile(dataFile, fileName, options = {}) 
     ok: true,
     restoredFrom: fileName,
     restoredCount: restoredItems.length,
-    beforeRestoreBackupFileName: beforeRestoreBackup.split("/").pop(),
+    beforeRestoreBackupFileName: basename(beforeRestoreBackup),
     items: sortForManagement(restoredItems),
     summary: summarizeSubscriptions(restoredItems)
   };
@@ -212,7 +328,7 @@ export async function importJSONTextToDataFile(dataFile, textBody, options = {})
   return {
     items: sortForManagement(items),
     summary: summarizeSubscriptions(items),
-    beforeImportBackupFileName: beforeImportBackup.split("/").pop()
+    beforeImportBackupFileName: basename(beforeImportBackup)
   };
 }
 
@@ -232,7 +348,7 @@ export function validateSubscriptionArray(input, now = new Date()) {
   try {
     return input.map((item) => normalizeSubscription({
       ...item,
-      id: item.id || randomUUID()
+      id: typeof item.id === "string" && item.id.trim() ? item.id : randomUUID()
     }, null, now));
   } catch {
     throw httpError(400, "订阅数据结构不符合要求");
