@@ -1,34 +1,80 @@
-# Contributing
+# 贡献指南
 
-Thanks for considering a contribution to Subscription Manager Web.
+感谢你愿意参与订阅管理 Web App 的改进。本项目优先服务本地个人使用场景，目标是保持简单、透明、易备份、易维护。
 
-## Development
+## 文档语言规则
 
-Requirements:
+除必要文件或必要内容外，项目文档一律中文优先。
 
-- Node.js 20 or newer
-- No package install is required for the current zero-dependency version
+中文优先包括：
 
-Run locally:
+- `README.md`、`CONTRIBUTING.md`、`SECURITY.md`、`CHANGELOG.md`、`docs/` 下的说明文档优先使用中文。
+- 面向 GitHub 访客、使用者、贡献者的说明优先使用中文。
+- 新增功能、配置、限制、测试方式、踩坑记录优先补充中文说明。
+- 如需英文文档，使用独立英文文件，例如 `README.en.md`，并在中文文档中提供链接。
+
+可以保留英文的内容包括：
+
+- `LICENSE` 等法律文本或许可证原文。
+- API 路径、HTTP 方法、环境变量、命令、代码符号、文件名、包名、错误码等技术标识。
+- GitHub 默认模板、工具配置或生态约定中必须使用英文的字段。
+- 为方便国际用户阅读而单独维护的英文翻译文件。
+
+提交文档变更时，请优先检查是否需要同步更新 `README.md`、`docs/API.md`、`docs/ARCHITECTURE.md`、`docs/开发计划.md` 或 `docs/踩坑日志.md`。
+
+## 开发环境
+
+要求：
+
+- Node.js 20 或更新版本。
+- 当前版本不需要安装第三方依赖。
+
+本地启动：
 
 ```bash
-npm run dev
+npm start
 ```
 
-Run tests:
+或使用一键启动脚本：
+
+```bash
+./start-subscription-manager.sh
+```
+
+访问地址：
+
+```text
+http://127.0.0.1:5173
+```
+
+运行测试：
 
 ```bash
 npm test
 ```
 
-## Pull Request Guidelines
+## 贡献请求规则
 
-- Keep changes focused and easy to review.
-- Add or update tests when changing subscription calculation, storage, or API behavior.
-- Update `README.md` when user-facing behavior changes.
-- Do not commit local subscription data from `data/subscriptions.json`.
-- Prefer dependency-free changes unless a dependency clearly improves maintainability.
+- 保持变更聚焦，避免把无关重构、格式化和功能改动混在一起。
+- 修改订阅计算、续费状态、排序、统计、存储、备份或 API 行为时，需要补充或更新测试。
+- 修改用户可见行为时，需要同步更新 `README.md` 或相关中文文档。
+- 不要提交真实个人订阅数据，尤其是 `data/subscriptions.json` 和 `data/backups/*.json`。
+- 优先保持零依赖；如确实需要新增依赖，请先说明必要性、替代方案和维护成本。
+- 保持当前技术主线：Node.js 原生 HTTP 后端、静态前端、本地 JSON 存储。
 
-## Project Scope
+## 项目边界
 
-This project is a local-first web app. Native macOS WidgetKit support is intentionally out of scope for now because it requires Apple Development Team and App Group signing.
+当前明确不做：
+
+- 登录系统、多用户权限或账号体系。
+- 数据库、云同步或自动汇率换算。
+- 原生 macOS Widget、WidgetKit、App Group 或 Apple Development Team 配置。
+- Electron 打包。
+- 复杂前端框架迁移，除非 UI 复杂度已经明显超过静态前端可维护范围。
+
+## 数据安全注意事项
+
+- 主数据文件位于 `data/subscriptions.json`，真实数据默认被 Git 忽略。
+- 自动备份目录为 `data/backups/`，真实备份 JSON 默认被 Git 忽略。
+- 导入 JSON 会替换当前本地数据，调整相关逻辑时必须谨慎。
+- 备份失败不应阻断主保存流程，但需要保留清晰日志。

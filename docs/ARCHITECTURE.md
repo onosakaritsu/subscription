@@ -1,29 +1,87 @@
-# Architecture
+# 架构说明
 
-Subscription Manager Web is intentionally small and local-first.
+订阅管理 Web App 是一个本地优先、零第三方运行时依赖的个人订阅管理工具。当前架构刻意保持小而直观，方便用户检查数据、备份数据和理解系统行为。
 
-## Runtime
+## 运行时组成
 
-- `src/server.mjs` provides the HTTP server, JSON API, static file serving, file persistence, and backup trigger.
-- `src/domain/subscriptions.mjs` contains subscription calculations, renewal status, sorting, and summary metrics.
-- `src/storage/backups.mjs` contains local backup file naming, creation, and pruning.
-- `public/` contains the browser UI.
-- `data/subscriptions.json` is created locally at runtime and ignored by Git.
-- `data/backups/` stores automatic backups and keeps only the newest 20 JSON files.
+- `src/server.mjs`：提供 Node.js 原生 HTTP 服务、JSON API、静态资源服务、本地 JSON 持久化和自动备份触发。
+- `src/domain/subscriptions.mjs`：订阅领域逻辑，包括续费日期计算、续费状态、列表排序、筛选辅助和统计汇总。
+- `src/storage/backups.mjs`：本地备份文件命名、备份创建和保留策略。
+- `public/index.html`：页面结构。
+- `public/styles.css`：界面样式和窄窗口适配。
+- `public/app.js`：前端交互、表单、导入导出、列表渲染和统计展示。
+- `data/subscriptions.json`：运行时创建的本地主数据文件，默认被 Git 忽略。
+- `data/backups/`：自动备份目录，只提交 `.gitkeep`，真实备份 JSON 默认被 Git 忽略。
+- `tests/`：基于 Node.js 内置测试模块的测试用例。
 
-## Design Decisions
+## 数据流
 
-- No Apple Development Team dependency.
-- No WidgetKit or App Group.
-- No third-party runtime dependencies.
-- Local JSON is the first storage layer because it is easy to inspect, back up, import, and export.
-- Renewal status and sorting live in the domain layer rather than DOM rendering.
-- Backups are best-effort: backup failures are logged but do not block the main save path.
+1. 浏览器访问 `http://127.0.0.1:5173` 加载静态页面。
+2. 前端通过 `/api/subscriptions` 获取订阅列表、统计摘要和最近续费摘要。
+3. 用户新增、编辑、删除或导入数据时，前端调用对应 JSON API。
+4. 服务端校验并规范化订阅数据后写入 `data/subscriptions.json`。
+5. 主数据保存成功后，服务端尝试写入 `data/backups/` 自动备份。
+6. 前端重新拉取数据并按领域层规则展示排序、状态和统计。
 
-## Upgrade Paths
+## 核心设计决策
 
-- Manual backup restore UI.
-- SQLite adapter for larger local datasets.
-- Browser notifications or calendar export for renewal reminders.
-- React/Vite frontend if UI complexity grows.
-- Tauri or Electron only if a packaged desktop app becomes necessary.
+- 不需要 Apple Development Team，不使用 WidgetKit、App Group 或原生 macOS 小组件。
+- 不引入数据库；本地 JSON 是第一存储层，便于查看、复制、备份和导入导出。
+- 不引入第三方运行时依赖；当前功能量适合使用 Node.js 原生 HTTP 和静态前端完成。
+- 续费状态、排序和统计放在领域层，避免只写在 DOM 渲染逻辑里。
+- 自动备份采用尽力而为策略：备份失败会记录日志，但不阻断主数据保存。
+- 多币种金额分别统计，不做自动汇率换算，避免产生不透明的估算结果。
+- 页面优先适配 420px～600px 的窄窗口，便于像桌面侧边小工具一样长期打开。
+
+## 主要领域规则
+
+续费状态按“下次续费日”和当前日期计算：
+
+- 已停用订阅显示为“已停用”，不参与紧急续费提醒。
+- 早于今天：已过期。
+- 等于今天：今日续费。
+- 未来 1～3 天：3 日内。
+- 未来 4～7 天：7 日内。
+- 当前自然月内且不属于上述状态：本月内。
+- 其他情况：正常。
+
+列表默认排序：
+
+- 启用订阅优先。
+- 启用订阅按下次续费日从近到远排序，已过期自然排在最前。
+- 停用订阅放在底部。
+- 停用订阅内部同样按下次续费日从近到远排序。
+
+金额折算：
+
+- 月付：月度金额 = 原金额；年度金额 = 原金额 × 12。
+- 季付：月度金额 = 原金额 ÷ 3；年度金额 = 原金额 × 4。
+- 半年付：月度金额 = 原金额 ÷ 6；年度金额 = 原金额 × 2。
+- 年付：月度金额 = 原金额 ÷ 12；年度金额 = 原金额。
+- 一次性：不计入周期性月度/年度折算，可作为一次性支出单独展示。
+- 多币种分别统计，不自动换算。
+
+## 备份策略
+
+- 每次成功保存订阅数据后生成一份备份。
+- 备份文件名格式为 `subscriptions-backup-YYYY-MM-DD-HH-mm-ss.json`。
+- 最多保留最近 20 份备份。
+- 超过数量时删除最旧备份。
+- `data/backups/` 不存在时自动创建。
+- 备份失败只记录服务端错误日志，不影响主保存流程。
+
+## 文档与开源规则
+
+- GitHub 默认入口是中文 `README.md`。
+- 除许可证原文、代码标识、API 路径、命令、配置字段和独立英文翻译外，项目文档中文优先。
+- 贡献说明、安全说明、架构说明、开发计划和踩坑日志都应保持中文。
+- 面向国际用户的英文内容应放在独立文件中，例如 `README.en.md`。
+
+## 可选演进方向
+
+- 增加手动选择备份并恢复的界面。
+- 增加日历导出或浏览器通知提醒。
+- 增加更完整的导入预览与冲突提示。
+- 当数据量明显增长时，再评估 SQLite 适配层。
+- 当 UI 复杂度明显增长时，再评估 React/Vite 等前端构建方案。
+- 只有确实需要桌面安装包时，再评估 Tauri 或 Electron。

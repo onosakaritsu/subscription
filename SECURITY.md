@@ -1,20 +1,40 @@
-# Security Policy
+# 安全说明
 
-## Supported Versions
+## 支持范围
 
-The current `main` branch is supported.
+当前支持 `main` 分支。由于项目是本地优先的个人工具，安全维护重点放在本地数据安全、导入导出安全、开源仓库脱敏和依赖面控制上。
 
-## Reporting a Vulnerability
+## 漏洞报告
 
-Please report security issues privately through GitHub Security Advisories if available, or by opening a minimal issue that does not disclose exploitable details.
+如发现安全问题，请优先通过 GitHub Security Advisories 私下报告；如果仓库暂未开启该功能，可以创建一个尽量简短的 Issue，但不要公开可直接利用的细节。
 
-Include:
+报告时建议包含：
 
-- A short description of the issue
-- Steps to reproduce
-- Potential impact
-- Suggested fix, if known
+- 问题简述。
+- 复现步骤。
+- 可能影响范围。
+- 建议修复方式，如已知。
 
-## Data Safety
+## 本地数据安全
 
-Subscription data is stored locally in `data/subscriptions.json` by default. Do not commit real personal subscription data to a public repository.
+- 默认主数据文件为 `data/subscriptions.json`。
+- 自动备份目录为 `data/backups/`。
+- 真实订阅数据和真实备份文件默认不应提交到公开仓库。
+- JSON 导入会替换当前本地数据，导入前建议确认已有自动备份可用。
+- 本项目不提供云同步、登录、多用户权限或服务端加密能力。
+
+## 依赖与运行安全
+
+- 当前项目不使用第三方运行时依赖，降低供应链风险。
+- 不建议将服务直接暴露到公网；默认面向本机访问：`http://127.0.0.1:5173`。
+- 如需修改 `HOST` 为局域网或公网地址，请自行评估网络访问风险。
+- 不要在 Issue、PR、截图或导出的 JSON 中暴露真实账号、付款方式、订单号、邮箱等敏感信息。
+
+## 开源仓库脱敏规则
+
+提交前请确认：
+
+- `data/subscriptions.json` 未包含真实个人数据并且不会被提交。
+- `data/backups/*.json` 未被提交。
+- 文档示例使用虚构数据。
+- 日志、截图、测试 fixture 中不包含真实订阅、账号或支付信息。

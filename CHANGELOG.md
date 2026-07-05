@@ -1,11 +1,23 @@
-# Changelog
+# 更新日志
 
 ## 2.0.0 - 2026-07-02
 
-- Migrated from the original macOS SwiftUI / WidgetKit direction to a local-first web app.
-- Added zero-dependency Node.js HTTP backend.
-- Added static HTML/CSS/JavaScript frontend.
-- Added JSON file storage, import, and export.
-- Added subscription calculation, filtering, and summary metrics.
-- Removed WidgetKit and App Group requirements.
-- Added open-source project files and MIT license.
+- 从早期 macOS SwiftUI / WidgetKit 方向迁移为本地优先 Web App。
+- 新增零第三方依赖的 Node.js 原生 HTTP 后端。
+- 新增静态 HTML/CSS/JavaScript 前端。
+- 新增本地 JSON 文件存储、导入和导出。
+- 新增订阅日期计算、筛选和摘要统计。
+- 移除 WidgetKit 与 App Group 依赖。
+- 新增开源项目文件和 MIT 许可证。
+
+## 2.1.0 - 2026-07-05
+
+- 新增续费状态标签：已过期、今日续费、3 日内、7 日内、本月内、正常、已停用。
+- 优化订阅列表默认排序，启用订阅优先并按续费日期从近到远展示。
+- 新增首页统计卡片，支持多币种月度和年度折算。
+- 增强最近续费摘要，优先展示紧急续费项目。
+- 新增本地自动备份，最多保留最近 20 份。
+- 优化 JSON 导出文件名。
+- 新增一键启动脚本 `start-subscription-manager.sh`。
+- 优化 420px～600px 窄窗口下的桌面化使用体验。
+- 将 GitHub 默认文档入口调整为中文，并新增独立英文 README。

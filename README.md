@@ -4,7 +4,7 @@
 
 当前项目已从早期 macOS SwiftUI / WidgetKit 方向迁移为纯网页应用。它不需要 Apple Development Team，不使用 App Group / WidgetKit，也不依赖原生 macOS 小组件。
 
-English documentation: [README.en.md](README.en.md)
+英文文档：[README.en.md](README.en.md)
 
 ## 功能特性
 
@@ -32,6 +32,14 @@ English documentation: [README.en.md](README.en.md)
 - 不需要 Apple Development Team
 - 不使用 WidgetKit
 
+## 文档语言
+
+GitHub 默认显示中文版 `README.md`。除许可证原文、代码标识、API 路径、命令、配置字段和独立英文翻译外，项目文档中文优先。
+
+- 中文贡献指南：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 中文安全说明：[SECURITY.md](SECURITY.md)
+- 中文架构说明：[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 英文 README：[README.en.md](README.en.md)
 ## 环境要求
 
 - Node.js 20 或更新版本

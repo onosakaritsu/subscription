@@ -1,37 +1,37 @@
-# API Reference
+# API 参考
 
-Base URL when running locally:
+本地运行时的基础地址：
 
 ```text
 http://127.0.0.1:5173
 ```
 
-## Health
+## 健康检查
 
 `GET /api/health`
 
-Returns:
+返回：
 
 ```json
 {"ok":true}
 ```
 
-## List Subscriptions
+## 获取订阅列表
 
 `GET /api/subscriptions`
 
-Returns all subscriptions sorted for management, plus summary metrics. Items include derived renewal status fields:
+返回按管理规则排序后的订阅列表，并附带摘要统计。每条订阅会包含以下派生续费状态字段：
 
 - `renewalStatus.key`
 - `renewalStatus.label`
 - `renewalStatus.daysUntilRenewal`
 - `renewalStatusText`
 
-## Create Subscription
+## 新增订阅
 
 `POST /api/subscriptions`
 
-JSON body:
+请求体示例：
 
 ```json
 {
@@ -48,7 +48,7 @@ JSON body:
 }
 ```
 
-Supported billing cycles:
+支持的计费周期：
 
 - `weekly`
 - `monthly`
@@ -57,28 +57,28 @@ Supported billing cycles:
 - `yearly`
 - `oneTime`
 
-## Update Subscription
+## 更新订阅
 
 `PUT /api/subscriptions/:id`
 
-Uses the same JSON shape as create.
+请求体与新增订阅一致。
 
-## Delete Subscription
+## 删除订阅
 
 `DELETE /api/subscriptions/:id`
 
-## Export
+## 导出
 
 `GET /api/export`
 
-Downloads all subscriptions as JSON. The download filename is:
+以 JSON 文件下载全部订阅。默认下载文件名为：
 
 ```text
 subscriptions-backup-YYYY-MM-DD.json
 ```
 
-## Import
+## 导入
 
 `POST /api/import`
 
-Body must be an array of subscription objects. Existing local data is replaced. A successful import triggers an automatic backup.
+请求体必须是订阅对象数组。导入会替换现有本地数据；导入成功后会触发一次自动备份。

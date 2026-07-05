@@ -1,23 +1,23 @@
-# Code of Conduct
+# 行为准则
 
-## Our Pledge
+## 我们的承诺
 
-We pledge to make participation in this project a respectful and harassment-free experience for everyone.
+我们希望本项目的参与过程保持尊重、友善和建设性。无论贡献者的背景、经验水平或使用场景如何，都应被公平对待。
 
-## Expected Behavior
+## 期望行为
 
-- Be respectful and constructive.
-- Assume good intent, and ask clarifying questions when context is missing.
-- Keep discussions focused on the project and its users.
-- Accept maintainers' decisions when they are made to protect project quality or community safety.
+- 保持尊重，聚焦问题本身。
+- 默认他人出于善意；上下文不足时，先提问澄清。
+- 讨论应围绕项目质量、用户需求和维护成本展开。
+- 接受维护者为保护项目质量或社区安全而做出的决定。
 
-## Unacceptable Behavior
+## 不可接受行为
 
-- Harassment, threats, discrimination, or personal attacks.
-- Publishing private information without permission.
-- Repeatedly derailing technical discussions.
-- Any conduct that would reasonably make others feel unsafe or unwelcome.
+- 骚扰、威胁、歧视、人身攻击或羞辱。
+- 未经允许公开他人的私人信息。
+- 反复偏离技术讨论并干扰项目协作。
+- 任何会让他人合理感到不安全或不受欢迎的行为。
 
-## Enforcement
+## 执行方式
 
-Maintainers may remove comments, close issues, reject contributions, or block participants who violate this code of conduct.
+维护者可以删除评论、关闭 Issue、拒绝贡献，或限制违反行为准则的参与者继续参与项目。
