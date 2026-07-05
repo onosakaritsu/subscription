@@ -3,7 +3,14 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, stat, writeFile, mkdir } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
-import { createDataBackup } from "./storage/backups.mjs";
+import {
+  backupDirectoryFor,
+  createBeforeImportBackup,
+  createBeforeRestoreBackup,
+  createDataBackup,
+  listBackupFiles,
+  readBackupFile
+} from "./storage/backups.mjs";
 import {
   normalizeSubscription,
   sortForManagement,
@@ -70,13 +77,36 @@ async function routeAPI(request, response, url, context) {
 
   if (request.method === "GET" && url.pathname === "/api/subscriptions") {
     const items = sortForManagement(await loadItems(context.dataFile));
+    const summary = summarizeSubscriptions(items);
     sendJSON(response, 200, {
       items,
-      summary: summarizeSubscriptions(items)
+      summary,
+      calendar: summary.calendar
     });
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/backups") {
+    const backups = await listBackupFiles(backupDirectoryFor(context.dataFile));
+    sendJSON(response, 200, { backups });
+    return;
+  }
+
+  const backupMatch = url.pathname.match(/^\/api\/backups\/([^/]+)$/);
+  if (backupMatch && request.method === "GET") {
+    const fileName = decodeURIComponent(backupMatch[1]);
+    const backup = await getBackupPreview(context.dataFile, fileName);
+    sendJSON(response, 200, backup);
+    return;
+  }
+
+  const restoreMatch = url.pathname.match(/^\/api\/backups\/([^/]+)\/restore$/);
+  if (restoreMatch && request.method === "POST") {
+    const fileName = decodeURIComponent(restoreMatch[1]);
+    const result = await restoreBackupToDataFile(context.dataFile, fileName);
+    sendJSON(response, 200, result);
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/api/subscriptions") {
     const body = await readJSONBody(request);
     const items = await loadItems(context.dataFile);
@@ -128,25 +158,104 @@ async function routeAPI(request, response, url, context) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/import") {
-    const body = await readJSONBody(request);
-    if (!Array.isArray(body)) {
-      throw httpError(400, "导入内容必须是订阅数组");
-    }
-
-    const now = new Date();
-    const items = body.map((item) => normalizeSubscription({
-      ...item,
-      id: item.id || randomUUID()
-    }, null, now));
-    await saveItems(context.dataFile, items);
-    sendJSON(response, 200, { items: sortForManagement(items) });
+    const textBody = await readTextBody(request);
+    const result = await importJSONTextToDataFile(context.dataFile, textBody);
+    sendJSON(response, 200, result);
     return;
   }
 
   throw httpError(404, "接口不存在");
 }
 
-async function loadItems(dataFile) {
+export async function getBackupPreview(dataFile, fileName) {
+  try {
+    const preview = await readBackupFile(backupDirectoryFor(dataFile), fileName);
+    return {
+      ...preview,
+      subscriptions: sortForManagement(validateSubscriptionArray(preview.subscriptions))
+    };
+  } catch (error) {
+    throw backupHttpError(error);
+  }
+}
+
+export async function restoreBackupToDataFile(dataFile, fileName, options = {}) {
+  let preview;
+  try {
+    preview = await readBackupFile(backupDirectoryFor(dataFile), fileName);
+  } catch (error) {
+    throw backupHttpError(error);
+  }
+
+  const restoredItems = validateSubscriptionArray(preview.subscriptions, options.now);
+  const currentItems = await loadItems(dataFile);
+  const beforeRestoreBackup = await createBeforeRestoreBackup(dataFile, stripAllDerivedFields(currentItems), options);
+  await saveItems(dataFile, restoredItems);
+  console.log("Restored subscription data from backup " + fileName);
+
+  return {
+    ok: true,
+    restoredFrom: fileName,
+    restoredCount: restoredItems.length,
+    beforeRestoreBackupFileName: beforeRestoreBackup.split("/").pop(),
+    items: sortForManagement(restoredItems),
+    summary: summarizeSubscriptions(restoredItems)
+  };
+}
+
+export async function importJSONTextToDataFile(dataFile, textBody, options = {}) {
+  const parsed = parseImportJSON(textBody);
+  const items = validateSubscriptionArray(parsed, options.now);
+  const currentItems = await loadItems(dataFile);
+  const beforeImportBackup = await createBeforeImportBackup(dataFile, stripAllDerivedFields(currentItems), options);
+  await saveItems(dataFile, items);
+  return {
+    items: sortForManagement(items),
+    summary: summarizeSubscriptions(items),
+    beforeImportBackupFileName: beforeImportBackup.split("/").pop()
+  };
+}
+
+export function parseImportJSON(textBody) {
+  try {
+    return textBody ? JSON.parse(textBody) : {};
+  } catch {
+    throw httpError(400, "JSON 格式无效");
+  }
+}
+
+export function validateSubscriptionArray(input, now = new Date()) {
+  if (!Array.isArray(input)) {
+    throw httpError(400, "订阅数据结构不符合要求");
+  }
+
+  try {
+    return input.map((item) => normalizeSubscription({
+      ...item,
+      id: item.id || randomUUID()
+    }, null, now));
+  } catch {
+    throw httpError(400, "订阅数据结构不符合要求");
+  }
+}
+
+function backupHttpError(error) {
+  if (error.code === "INVALID_BACKUP_FILE_NAME") {
+    return httpError(400, "备份文件名不合法");
+  }
+  if (error.code === "ENOENT") {
+    return httpError(404, "备份文件不存在");
+  }
+  if (error.code === "INVALID_JSON") {
+    return httpError(400, "备份文件 JSON 格式无效");
+  }
+  if (error.code === "INVALID_SUBSCRIPTION_DATA") {
+    return httpError(400, "订阅数据结构不符合要求");
+  }
+  return error;
+}
+
+export async function loadItems(dataFile) {
   try {
     const data = await readFile(dataFile, "utf8");
     const parsed = JSON.parse(data);
@@ -160,7 +269,7 @@ async function loadItems(dataFile) {
   }
 }
 
-async function saveItems(dataFile, items) {
+export async function saveItems(dataFile, items) {
   await mkdir(resolve(dataFile, ".."), { recursive: true });
   const cleanItems = sortForManagement(items).map(stripDerivedFields);
   const tempFile = `${dataFile}.${process.pid}.tmp`;
@@ -174,7 +283,7 @@ async function saveItems(dataFile, items) {
   }
 }
 
-async function readJSONBody(request) {
+async function readTextBody(request) {
   const chunks = [];
   let size = 0;
 
@@ -186,11 +295,11 @@ async function readJSONBody(request) {
     chunks.push(chunk);
   }
 
-  try {
-    return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
-  } catch {
-    throw httpError(400, "JSON 格式无效");
-  }
+  return chunks.length ? Buffer.concat(chunks).toString("utf8") : "";
+}
+
+async function readJSONBody(request) {
+  return parseImportJSON(await readTextBody(request));
 }
 
 async function serveStatic(request, response, url, publicDir) {
@@ -226,6 +335,10 @@ async function serveStatic(request, response, url, publicDir) {
     }
     throw error;
   }
+}
+
+function stripAllDerivedFields(items) {
+  return sortForManagement(items).map(stripDerivedFields);
 }
 
 function stripDerivedFields(item) {

@@ -17,6 +17,9 @@ Chinese documentation is the default GitHub README: [README.md](README.md).
 - Urgent renewal summary showing up to 5 enabled subscriptions.
 - JSON import and export.
 - Automatic local backups after every successful save, keeping the newest 20 backups.
+- Backup list, preview, and restore workflow in the web UI.
+- Before restoring or importing data, the current local data is backed up first.
+- Lightweight renewal calendar view for current-month and next-month enabled subscriptions.
 - Narrow-window friendly UI for desktop side-panel usage.
 
 ## Tech Stack
@@ -67,11 +70,19 @@ Automatic backups:
 data/backups/
 ```
 
-Backups are named `subscriptions-backup-YYYY-MM-DD-HH-mm-ss.json` and the newest 20 files are kept.
+Backups are named `subscriptions-backup-YYYY-MM-DD-HH-mm-ss.json` and the newest 20 files are kept. Restore operations create `subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json`; JSON imports create `subscriptions-before-import-YYYY-MM-DD-HH-mm-ss.json` before replacing current data.
 
 ## JSON Import and Export
 
-Exports download as `subscriptions-backup-YYYY-MM-DD.json` and remain compatible with import.
+Exports download as `subscriptions-backup-YYYY-MM-DD.json` and remain compatible with import. Import validates JSON format and subscription structure before replacing data.
+
+## Backup Restore
+
+The UI includes a backup and restore panel. It can list local backups, preview a backup, and restore a selected valid backup after confirmation. Damaged backups are shown but cannot be restored.
+
+## Renewal Calendar
+
+The renewal calendar shows enabled subscriptions renewing in the current month and next month. Overdue items stay in the urgent renewal summary instead of being forced into the calendar.
 
 ## Testing
 

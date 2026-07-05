@@ -252,6 +252,36 @@ export function urgentRenewals(items, limit = 5, referenceDate = todayISO()) {
     .slice(0, limit);
 }
 
+export function renewalCalendarGroups(items, referenceDate = todayISO()) {
+  const reference = parseISODate(referenceDate);
+  const currentMonth = reference.getMonth();
+  const currentYear = reference.getFullYear();
+  const nextMonthDate = new Date(currentYear, currentMonth + 1, 1);
+  const nextMonth = nextMonthDate.getMonth();
+  const nextYear = nextMonthDate.getFullYear();
+  const groups = {
+    currentMonth: [],
+    nextMonth: []
+  };
+
+  for (const item of sortForManagement(items, referenceDate)) {
+    if (!item.isEnabled || item.nextRenewalDate < referenceDate) {
+      continue;
+    }
+
+    const renewal = parseISODate(item.nextRenewalDate);
+    if (renewal.getFullYear() === currentYear && renewal.getMonth() === currentMonth) {
+      groups.currentMonth.push(item);
+      continue;
+    }
+
+    if (renewal.getFullYear() === nextYear && renewal.getMonth() === nextMonth) {
+      groups.nextMonth.push(item);
+    }
+  }
+
+  return groups;
+}
 export function monthlyEquivalent(item) {
   const amount = Number(item.amount || 0);
   switch (item.billingCycle) {
@@ -326,6 +356,7 @@ export function summarizeSubscriptions(items, referenceDate = todayISO()) {
     within7DaysRenewalCount: within7DaysRenewals.length,
     upcoming: upcomingRenewals(items, 5, referenceDate),
     urgentUpcoming: urgentRenewals(items, 5, referenceDate),
+    calendar: renewalCalendarGroups(items, referenceDate),
     monthlyByCurrency: mapToSortedObject(monthlyByCurrency),
     yearlyByCurrency: mapToSortedObject(yearlyByCurrency),
     oneTimeByCurrency: mapToSortedObject(oneTimeByCurrency)

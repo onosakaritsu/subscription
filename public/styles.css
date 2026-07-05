@@ -175,13 +175,13 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .toolbar-actions { display: flex; gap: 8px; }
 .file-button input { display: none; }
 
-.renewal-summary, .editor-form {
+.renewal-summary, .calendar-panel, .editor-form, .backup-panel {
   max-width: 900px;
   border: 1px solid var(--line);
   background: var(--panel);
   box-shadow: var(--shadow);
 }
-.renewal-summary { display: grid; gap: 12px; padding: 18px; }
+.renewal-summary, .calendar-panel, .backup-panel { display: grid; gap: 12px; padding: 18px; }
 .upcoming-summary-list { display: grid; gap: 8px; }
 .upcoming-item {
   display: grid;
@@ -196,6 +196,46 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .upcoming-item strong, .upcoming-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .upcoming-item > span:not(.status-badge) { color: var(--muted); font-size: 12px; }
 .amount-text { justify-self: end; color: var(--text) !important; font-weight: 650; }
+.calendar-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.calendar-group { display: grid; gap: 8px; min-width: 0; }
+.calendar-group h4 { margin: 0; font-size: 14px; }
+.calendar-list { display: grid; gap: 8px; }
+.calendar-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  background: #fbfcfc;
+}
+.calendar-item strong, .calendar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-item strong { font-size: 13px; }
+.calendar-name { font-size: 13px; }
+
+.backup-list { display: grid; gap: 10px; }
+.backup-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(160px, auto) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: #fbfcfc;
+}
+.backup-main, .backup-meta, .backup-actions, .backup-preview, .preview-heading, .preview-row { min-width: 0; }
+.backup-main { display: grid; gap: 4px; }
+.backup-main strong, .backup-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backup-main span, .backup-meta span, .backup-preview span, .preview-row span { color: var(--muted); font-size: 12px; }
+.backup-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.backup-valid { color: var(--accent) !important; font-weight: 700; }
+.backup-invalid { color: var(--danger) !important; font-weight: 700; }
+.backup-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.backup-actions button:disabled { cursor: not-allowed; opacity: 0.45; }
+.backup-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); background: #f8faf9; }
+.preview-heading, .preview-row { display: grid; gap: 3px; }
+.preview-row { padding: 8px 0; border-top: 1px solid var(--line); }
 
 .editor-form { display: grid; gap: 18px; padding: 22px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
@@ -245,7 +285,15 @@ label { display: grid; gap: 7px; font-size: 13px; font-weight: 620; }
   .subscription-row { grid-template-columns: 5px minmax(0, 1fr); }
   .row-date { grid-column: 2; display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; }
   .row-date span { max-width: none; }
-  .upcoming-item { grid-template-columns: 1fr auto; align-items: start; }
+  .upcoming-item, .calendar-item { grid-template-columns: 1fr auto; align-items: start; }
+  .calendar-grid { grid-template-columns: 1fr; }
+  .calendar-item .status-badge { grid-column: 1; width: max-content; }
+  .calendar-item strong { grid-column: 1; }
+  .calendar-name { grid-column: 1 / -1; }
+  .calendar-item .amount-text { grid-column: 2; grid-row: 3; }
+  .backup-item { grid-template-columns: 1fr; align-items: start; }
+  .backup-actions { justify-content: stretch; flex-wrap: wrap; }
+  .backup-actions button { flex: 1; min-width: 120px; }
   .upcoming-item .status-badge { grid-column: 1; width: max-content; }
   .upcoming-item strong { grid-column: 1 / -1; }
   .upcoming-item > span:not(.status-badge) { grid-column: 1; }
