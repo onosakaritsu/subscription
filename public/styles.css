@@ -120,8 +120,10 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .metric.tone-caution { border-color: var(--status-caution-border); background: var(--status-caution-bg); color: var(--status-caution-text); }
 .metric.tone-success { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-text); }
 .metric.tone-muted { border-color: var(--status-muted-border); background: var(--status-muted-bg); color: var(--status-muted-text); }
-.currency-line { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.currency-line { display: block; overflow-wrap: anywhere; line-height: 1.35; }
 .muted-value { color: var(--muted); font-weight: 500; }
+.money-compact { font-weight: 800; color: var(--text); }
+.money-meta { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 
 /* Status system */
 .status-badge { display: inline-flex; align-items: center; flex: 0 0 auto; min-height: 22px; padding: 0 8px; border: 1px solid var(--status-muted-border); border-radius: 999px; background: var(--status-muted-bg); color: var(--status-muted-text); font-size: 11px; font-weight: 800; line-height: 1; white-space: nowrap; }
@@ -158,12 +160,14 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .card-actions { grid-column: 1 / -1; padding-left: 4px; }
 .upcoming-item, .calendar-item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 44px; padding: 9px 10px; }
 .upcoming-item strong, .calendar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.amount-text { justify-self: end; font-weight: 700; }
+.amount-text { justify-self: end; max-width: 220px; font-weight: 700; overflow-wrap: anywhere; text-align: right; }
 .calendar-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .calendar-group { display: grid; gap: 8px; min-width: 0; }
 .calendar-group h3 { color: var(--muted); }
 
 /* Backups */
+.backup-drill-hint { padding: 10px 12px; border: 1px solid var(--status-info-border); border-radius: var(--radius-sm); background: var(--status-info-bg); color: var(--status-info-text); font-size: 13px; line-height: 1.45; }
+.backup-drill-hint.tone-caution { border-color: var(--status-caution-border); background: var(--status-caution-bg); color: var(--status-caution-text); }
 .backup-item { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(160px, auto) auto; align-items: center; gap: 12px; padding: 12px; }
 .backup-main, .backup-meta, .backup-actions, .backup-preview, .preview-heading, .preview-row { min-width: 0; }
 .backup-main { display: grid; gap: 4px; }
@@ -176,6 +180,19 @@ input:focus, select:focus, textarea:focus { border-color: var(--accent); box-sha
 .backup-preview { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
 .preview-heading, .preview-row { display: grid; gap: 3px; }
 .preview-row { padding: 8px 0; border-top: 1px solid var(--line); }
+
+/* Integrity */
+.integrity-result { display: grid; gap: 10px; }
+.integrity-summary { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-soft); }
+.integrity-summary strong { font-size: 16px; }
+.integrity-summary span { color: var(--muted); font-size: 12px; }
+.integrity-summary.tone-danger { border-color: var(--status-danger-border); background: var(--status-danger-bg); color: var(--status-danger-text); }
+.integrity-summary.tone-caution { border-color: var(--status-caution-border); background: var(--status-caution-bg); color: var(--status-caution-text); }
+.integrity-summary.tone-success { border-color: var(--status-success-border); background: var(--status-success-bg); color: var(--status-success-text); }
+.integrity-summary.tone-danger span, .integrity-summary.tone-caution span, .integrity-summary.tone-success span { color: inherit; opacity: 0.86; }
+.integrity-issues { display: grid; gap: 8px; }
+.integrity-issue { display: grid; grid-template-columns: auto minmax(100px, 0.6fr) minmax(0, 1fr); align-items: center; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-soft); }
+.integrity-issue strong, .integrity-issue span:last-child { min-width: 0; overflow-wrap: anywhere; }
 
 /* Dialog */
 .subscription-dialog { width: min(760px, calc(100vw - 28px)); max-height: min(820px, calc(100vh - 28px)); padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
@@ -206,7 +223,7 @@ label span { color: var(--muted); }
   .dashboard-grid, .calendar-grid { grid-template-columns: 1fr; }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .subscription-card { grid-template-columns: 1fr; }
-  .card-side { justify-items: start; grid-template-columns: repeat(3, auto); align-items: center; }
+  .card-side { justify-items: start; grid-template-columns: repeat(2, minmax(0, auto)); align-items: center; }
   .backup-item { grid-template-columns: 1fr; align-items: start; }
   .backup-actions { justify-content: stretch; }
   .backup-actions button { flex: 1; min-width: 92px; }
@@ -219,7 +236,8 @@ label span { color: var(--muted); }
   .check-row { padding-top: 0; }
   .upcoming-item, .calendar-item { grid-template-columns: auto minmax(0, 1fr); }
   .upcoming-item .status-badge, .calendar-item .status-badge { width: max-content; }
-  .amount-text { justify-self: start; }
+  .amount-text { justify-self: start; max-width: 100%; text-align: left; }
+  .integrity-issue { grid-template-columns: 1fr; align-items: start; }
   .hero-actions, .import-export-actions, .backup-toolbar, .card-actions, .dialog-actions { width: 100%; }
   .hero-actions > *, .import-export-actions > *, .backup-toolbar > *, .card-actions > *, .dialog-actions > button:not(.danger) { flex: 1; }
   .subscription-dialog { width: 100vw; max-height: 100vh; border-radius: 0; }

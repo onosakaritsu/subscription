@@ -67,6 +67,7 @@
           </div>
           <div class="import-export-actions">
             <button id="exportButton" class="secondary" type="button">导出 JSON</button>
+            <button id="calendarExportButton" class="secondary" type="button" title="可将未来续费日期导入系统日历">导出续费日历 ICS</button>
             <label class="secondary file-button">普通导入<input id="importInput" type="file" accept="application/json"></label>
           </div>
         </div>
@@ -108,10 +109,22 @@
             <label class="secondary file-button">从外部备份恢复<input id="externalRestoreInput" type="file" accept="application/json"></label>
           </div>
         </div>
+        <div id="backupDrillHint" class="backup-drill-hint">建议定期下载备份 JSON，并在恢复前通过预览功能确认备份内容。</div>
         <div id="backupList" class="backup-list"></div>
         <div id="emptyBackups" class="empty-state compact hidden"><strong>暂无备份</strong><span>保存、导入或恢复订阅后会自动生成备份。</span></div>
         <button id="toggleBackupsButton" class="secondary hidden" type="button">显示全部</button>
         <div id="backupPreview" class="backup-preview hidden"></div>
+      </section>
+
+      <section class="panel integrity-panel" aria-label="数据完整性检查">
+        <div class="section-heading top-aligned">
+          <div>
+            <h2>数据完整性检查</h2>
+            <p>只读检查本地 JSON 的结构、日期、金额、币种和重复项，不会自动修改数据。</p>
+          </div>
+          <button id="integrityButton" class="secondary" type="button">立即检查</button>
+        </div>
+        <div id="integrityResult" class="integrity-result"></div>
       </section>
     </main>
 

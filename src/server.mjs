@@ -14,6 +14,8 @@ import {
   readBackupFile
 } from "./storage/backups.mjs";
 import {
+  createRenewalCalendarICS,
+  diagnoseSubscriptions,
   normalizeSubscription,
   renewSubscription,
   sortForManagement,
@@ -92,6 +94,24 @@ async function routeAPI(request, response, url, context) {
   if (request.method === "GET" && url.pathname === "/api/backups") {
     const backups = await listBackupFiles(backupDirectoryFor(context.dataFile));
     sendJSON(response, 200, { backups });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/integrity") {
+    const report = await getDataIntegrityReport(context.dataFile);
+    sendJSON(response, 200, report);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/calendar.ics") {
+    const items = await loadItems(context.dataFile);
+    const ics = createRenewalCalendarICS(items);
+    response.writeHead(200, {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="subscriptions-renewals.ics"',
+      "Cache-Control": "no-store"
+    });
+    response.end(ics);
     return;
   }
 
@@ -204,6 +224,38 @@ async function routeAPI(request, response, url, context) {
   }
 
   throw httpError(404, "接口不存在");
+}
+
+export async function getDataIntegrityReport(dataFile, options = {}) {
+  const checkedAt = (options.now ?? new Date()).toISOString();
+
+  try {
+    const text = await readFile(dataFile, "utf8");
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return {
+        ok: false,
+        checkedAt,
+        summary: { total: 0, valid: 0, warnings: 0, errors: 1 },
+        issues: [{ level: "error", type: "invalid_json", message: "主数据文件 JSON 格式无效" }]
+      };
+    }
+
+    return {
+      checkedAt,
+      ...diagnoseSubscriptions(parsed)
+    };
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return {
+        checkedAt,
+        ...diagnoseSubscriptions([])
+      };
+    }
+    throw error;
+  }
 }
 
 export async function createManualBackupForDataFile(dataFile, options = {}) {

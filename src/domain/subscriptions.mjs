@@ -8,7 +8,21 @@ export const categories = [
   "其他"
 ];
 
-export const currencies = ["CNY", "USD", "EUR", "HKD", "JPY", "GBP"];
+export const currencyMetadata = {
+  CNY: { code: "CNY", symbol: "¥", nameZh: "人民币", nameEn: "Chinese Yuan", displayName: "¥ / CNY / 人民币", compactLabel: "¥" },
+  USD: { code: "USD", symbol: "$", nameZh: "美元", nameEn: "US Dollar", displayName: "$ / USD / 美元", compactLabel: "$" },
+  JPY: { code: "JPY", symbol: "¥", nameZh: "日元", nameEn: "Japanese Yen", displayName: "¥ / JPY / 日元", compactLabel: "¥" },
+  EUR: { code: "EUR", symbol: "€", nameZh: "欧元", nameEn: "Euro", displayName: "€ / EUR / 欧元", compactLabel: "€" },
+  HKD: { code: "HKD", symbol: "HK$", nameZh: "港币", nameEn: "Hong Kong Dollar", displayName: "HK$ / HKD / 港币", compactLabel: "HK$" },
+  GBP: { code: "GBP", symbol: "£", nameZh: "英镑", nameEn: "British Pound", displayName: "£ / GBP / 英镑", compactLabel: "£" },
+  KRW: { code: "KRW", symbol: "₩", nameZh: "韩元", nameEn: "South Korean Won", displayName: "₩ / KRW / 韩元", compactLabel: "₩" },
+  TWD: { code: "TWD", symbol: "NT$", nameZh: "新台币", nameEn: "New Taiwan Dollar", displayName: "NT$ / TWD / 新台币", compactLabel: "NT$" },
+  AUD: { code: "AUD", symbol: "A$", nameZh: "澳元", nameEn: "Australian Dollar", displayName: "A$ / AUD / 澳元", compactLabel: "A$" },
+  CAD: { code: "CAD", symbol: "C$", nameZh: "加元", nameEn: "Canadian Dollar", displayName: "C$ / CAD / 加元", compactLabel: "C$" },
+  SGD: { code: "SGD", symbol: "S$", nameZh: "新加坡元", nameEn: "Singapore Dollar", displayName: "S$ / SGD / 新加坡元", compactLabel: "S$" }
+};
+
+export const currencies = Object.keys(currencyMetadata);
 
 export const billingCycles = ["weekly", "monthly", "quarterly", "semiannual", "yearly", "oneTime"];
 
@@ -21,14 +35,67 @@ export const billingCycleLabels = {
   oneTime: "一次性"
 };
 
-export const currencySymbols = {
-  CNY: "¥",
-  USD: "$",
-  EUR: "€",
-  HKD: "HK$",
-  JPY: "¥",
-  GBP: "£"
-};
+export const currencySymbols = Object.fromEntries(
+  Object.entries(currencyMetadata).map(([code, meta]) => [code, meta.symbol])
+);
+
+const zeroDecimalCurrencies = new Set(["JPY", "KRW"]);
+
+export function normalizeCurrencyCode(value) {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+export function isKnownCurrency(code) {
+  return Boolean(currencyMetadata[normalizeCurrencyCode(code)]);
+}
+
+export function getCurrencyMeta(code) {
+  const normalized = normalizeCurrencyCode(code);
+  const known = currencyMetadata[normalized];
+  if (known) {
+    return { ...known, isKnown: true };
+  }
+
+  const fallbackCode = normalized || "UNKNOWN";
+  return {
+    code: fallbackCode,
+    symbol: normalized,
+    nameZh: "其他币种",
+    nameEn: "Other Currency",
+    displayName: normalized ? `${normalized} / 其他币种` : "未知币种",
+    compactLabel: normalized,
+    isKnown: false
+  };
+}
+
+export function formatCurrencyLabel(currencyCode) {
+  return getCurrencyMeta(currencyCode).displayName;
+}
+
+export function formatCurrencyAmount(amount, currencyCode, options = {}) {
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric)) {
+    return "—";
+  }
+
+  const meta = getCurrencyMeta(currencyCode);
+  const fractionDigits = zeroDecimalCurrencies.has(meta.code) ? 0 : 2;
+  const value = numeric.toLocaleString("zh-CN", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits
+  });
+
+  if (options.style === "compact") {
+    return `${meta.compactLabel || meta.code}${value}`;
+  }
+
+  if (options.style === "meta") {
+    return `${meta.code} · ${meta.nameZh}`;
+  }
+
+  const prefix = meta.symbol ? `${meta.symbol} ` : "";
+  return `${prefix}${value} · ${meta.code} · ${meta.nameZh}`;
+}
 
 export const statusMeta = {
   overdue: { statusKey: "overdue", label: "已过期", tone: "danger", priority: 100, description: "续费日期早于今天" },
@@ -140,9 +207,9 @@ export function normalizeSubscription(input, existing = null, now = new Date()) 
   }
 
   const category = categories.includes(input.category) ? input.category : "其他";
-  const currency = String(input.currency ?? "").trim().toUpperCase();
-  if (!currencies.includes(currency)) {
-    throw new Error("币种不符合要求");
+  const currency = normalizeCurrencyCode(input.currency);
+  if (!currency) {
+    throw new Error("币种不能为空");
   }
 
   const billingCycle = input.billingCycle;
@@ -444,6 +511,204 @@ export function summarizeSubscriptions(items, referenceDate = todayISO()) {
     yearlyByCurrency: mapToSortedObject(yearlyByCurrency),
     oneTimeByCurrency: mapToSortedObject(oneTimeByCurrency)
   };
+}
+
+export function diagnoseSubscriptions(input) {
+  const issues = [];
+  const errorIndexes = new Set();
+  const idIndexes = new Map();
+
+  if (!Array.isArray(input)) {
+    return {
+      ok: false,
+      summary: { total: 0, valid: 0, warnings: 0, errors: 1 },
+      issues: [{ level: "error", type: "invalid_root", message: "订阅数据结构不符合要求，根节点必须是数组" }]
+    };
+  }
+
+  const addIssue = (index, level, type, item, message) => {
+    if (level === "error") errorIndexes.add(index);
+    issues.push({
+      level,
+      type,
+      index,
+      subscriptionId: typeof item?.id === "string" ? item.id : undefined,
+      subscriptionName: typeof item?.name === "string" ? item.name : undefined,
+      message
+    });
+  };
+
+  input.forEach((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      addIssue(index, "error", "invalid_item", item, "订阅项必须是对象");
+      return;
+    }
+
+    const id = String(item.id ?? "").trim();
+    if (!id) {
+      addIssue(index, "error", "missing_id", item, "订阅 id 缺失");
+    } else {
+      const indexes = idIndexes.get(id) || [];
+      indexes.push(index);
+      idIndexes.set(id, indexes);
+    }
+
+    if (!String(item.name ?? "").trim()) {
+      addIssue(index, "error", "empty_name", item, "订阅名称不能为空");
+    }
+
+    const amount = Number(item.amount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      addIssue(index, "error", "invalid_amount", item, "金额不能为负数，且必须是数字");
+    }
+
+    const currency = normalizeCurrencyCode(item.currency);
+    if (!currency) {
+      addIssue(index, "error", "empty_currency", item, "币种不能为空");
+    } else if (!isKnownCurrency(currency)) {
+      addIssue(index, "warning", "unknown_currency", item, "未知币种会保留原代码，但显示为其他币种");
+    }
+
+    if (!billingCycles.includes(item.billingCycle)) {
+      addIssue(index, "error", "invalid_billing_cycle", item, "计费周期不符合要求");
+    }
+
+    if (!isValidISODate(item.startDate)) {
+      addIssue(index, "error", "invalid_start_date", item, "开始日期无效");
+    }
+
+    const activeValue = Object.hasOwn(item, "isEnabled") ? item.isEnabled : item.isActive;
+    if (activeValue !== undefined && typeof activeValue !== "boolean") {
+      addIssue(index, "error", "invalid_active_state", item, "启用状态必须是布尔值");
+    }
+
+    const isEnabled = activeValue !== false;
+    if (isEnabled && !item.nextRenewalDate) {
+      addIssue(index, "error", "missing_next_renewal_date", item, "已启用订阅缺少下次续费日");
+    } else if (item.nextRenewalDate && !isValidISODate(item.nextRenewalDate)) {
+      addIssue(index, "error", "invalid_next_renewal_date", item, "下次续费日无效");
+    }
+
+    if (isValidISODate(item.startDate) && isValidISODate(item.nextRenewalDate) && item.nextRenewalDate < item.startDate) {
+      addIssue(index, "warning", "renewal_before_start", item, "下次续费日早于开始日期，请确认是否为手动调整");
+    }
+  });
+
+  for (const [id, indexes] of idIndexes.entries()) {
+    if (indexes.length <= 1) continue;
+    for (const index of indexes) {
+      addIssue(index, "error", "duplicate_id", input[index], `订阅 id 重复：${id}`);
+    }
+  }
+
+  const errors = issues.filter((issue) => issue.level === "error").length;
+  const warnings = issues.filter((issue) => issue.level === "warning").length;
+  return {
+    ok: errors === 0,
+    summary: {
+      total: input.length,
+      valid: input.length - errorIndexes.size,
+      warnings,
+      errors
+    },
+    issues
+  };
+}
+
+export function createRenewalCalendarICS(items, options = {}) {
+  const referenceDate = options.referenceDate || todayISO();
+  const generatedAt = options.generatedAt || new Date();
+  const horizonDate = addMonths(referenceDate, 12);
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Subscription Manager Web//ZH-CN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH"
+  ];
+
+  for (const item of sortForManagement(items, referenceDate)) {
+    if (!item.isEnabled || !item.nextRenewalDate) continue;
+    if (!isValidISODate(item.nextRenewalDate)) continue;
+
+    if (item.billingCycle === "oneTime") {
+      if (item.nextRenewalDate >= referenceDate && item.nextRenewalDate <= horizonDate) {
+        appendICSEvent(lines, item, item.nextRenewalDate, generatedAt);
+      }
+      continue;
+    }
+
+    let eventDate = item.nextRenewalDate;
+    while (eventDate < referenceDate) {
+      eventDate = addCycle(eventDate, item.billingCycle);
+    }
+    while (eventDate <= horizonDate) {
+      appendICSEvent(lines, item, eventDate, generatedAt);
+      eventDate = addCycle(eventDate, item.billingCycle);
+    }
+  }
+
+  lines.push("END:VCALENDAR");
+  return `${lines.join("\r\n")}\r\n`;
+}
+
+
+function appendICSEvent(lines, item, eventDate, generatedAt) {
+  const isOneTime = item.billingCycle === "oneTime";
+  const title = `订阅续费：${item.name || "未命名订阅"}${isOneTime ? "（一次性）" : ""}`;
+  const description = [
+    `名称：${item.name || "未命名订阅"}`,
+    `金额：${formatCurrencyAmount(item.amount, item.currency)}`,
+    `周期：${billingCycleLabels[item.billingCycle] || item.billingCycle}`,
+    `分类：${item.category || "其他"}`,
+    item.notes ? `备注：${item.notes}` : "备注：无"
+  ].join("\n");
+
+  lines.push(
+    "BEGIN:VEVENT",
+    `UID:${safeICSUID(item.id || item.name || "subscription")}-${formatICSDate(eventDate)}@subscription-manager-web`,
+    `DTSTAMP:${formatICSTimestamp(generatedAt)}`,
+    `DTSTART;VALUE=DATE:${formatICSDate(eventDate)}`,
+    `DTEND;VALUE=DATE:${formatICSDate(addDays(eventDate, 1))}`,
+    `SUMMARY:${escapeICSText(title)}`,
+    `DESCRIPTION:${escapeICSText(description)}`,
+    "END:VEVENT"
+  );
+}
+
+function isValidISODate(value) {
+  try {
+    parseISODate(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function addDays(dateISO, days) {
+  const date = parseISODate(dateISO);
+  date.setDate(date.getDate() + days);
+  return dateToISO(date);
+}
+
+function formatICSDate(dateISO) {
+  return dateISO.replaceAll("-", "");
+}
+
+function formatICSTimestamp(date) {
+  return date.toISOString().replaceAll("-", "").replaceAll(":", "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function escapeICSText(value) {
+  return String(value ?? "")
+    .replaceAll("\\", "\\\\")
+    .replaceAll(";", "\\;")
+    .replaceAll(",", "\\,")
+    .replace(/\r?\n/g, "\\n");
+}
+
+function safeICSUID(value) {
+  return String(value).replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 80) || "subscription";
 }
 
 function statusResult(key, daysUntilRenewal) {

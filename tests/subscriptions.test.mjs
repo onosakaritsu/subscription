@@ -6,8 +6,13 @@ import { tmpdir } from "node:os";
 import {
   calculateNextRenewalDate,
   copySubscriptionDraft,
+  createRenewalCalendarICS,
+  diagnoseSubscriptions,
   exportSubscriptionFileName,
   filterAndSortSubscriptions,
+  formatCurrencyAmount,
+  formatCurrencyLabel,
+  getCurrencyMeta,
   getStatusMeta,
   monthlyEquivalent,
   normalizeSubscription,
@@ -30,8 +35,10 @@ import {
   readBackupFile
 } from "../src/storage/backups.mjs";
 import {
+  createApp,
   createManualBackupForDataFile,
   getBackupPreview,
+  getDataIntegrityReport,
   importJSONTextToDataFile,
   restoreBackupToDataFile,
   restoreUploadedBackupToDataFile,
@@ -196,6 +203,62 @@ describe("subscription domain", () => {
       exportSubscriptionFileName(new Date(2026, 6, 2, 8, 9, 5)),
       "subscriptions-export-2026-07-02.json"
     );
+  });
+
+  it("formats currency labels and amounts for known and unknown currencies", () => {
+    assert.equal(formatCurrencyLabel("CNY"), "¥ / CNY / 人民币");
+    assert.equal(formatCurrencyLabel("USD"), "$ / USD / 美元");
+    assert.equal(formatCurrencyLabel("JPY"), "¥ / JPY / 日元");
+    assert.equal(formatCurrencyLabel("EUR"), "€ / EUR / 欧元");
+    assert.equal(formatCurrencyLabel("HKD"), "HK$ / HKD / 港币");
+    assert.equal(getCurrencyMeta("XYZ").nameZh, "其他币种");
+    assert.equal(formatCurrencyAmount(1300, "JPY"), "¥ 1,300 · JPY · 日元");
+    assert.equal(formatCurrencyAmount(20, "USD"), "$ 20.00 · USD · 美元");
+  });
+
+  it("diagnoses valid data warnings errors duplicate ids and unknown currencies", () => {
+    const valid = [enabledItem("Valid", "2026-07-08")];
+    assert.equal(diagnoseSubscriptions(valid).ok, true);
+
+    const report = diagnoseSubscriptions([
+      { ...enabledItem("Duplicate", "2026-07-08"), id: "same" },
+      { ...enabledItem("Duplicate 2", "2026-07-09"), id: "same", currency: "XYZ" },
+      { id: "", name: "", category: "云服务", amount: -1, currency: "USD", billingCycle: "monthly", startDate: "2026-02-31", nextRenewalDate: "bad-date", isEnabled: "yes" }
+    ]);
+
+    assert.equal(report.ok, false);
+    assert.equal(report.issues.some((issue) => issue.type === "empty_name" && issue.level === "error"), true);
+    assert.equal(report.issues.some((issue) => issue.type === "invalid_amount" && issue.level === "error"), true);
+    assert.equal(report.issues.some((issue) => issue.type === "invalid_next_renewal_date" && issue.level === "error"), true);
+    assert.equal(report.issues.some((issue) => issue.type === "duplicate_id" && issue.level === "error"), true);
+    assert.equal(report.issues.some((issue) => issue.type === "unknown_currency" && issue.level === "warning"), true);
+  });
+
+  it("checks data integrity without modifying the data file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-integrity-"));
+    const dataFile = join(dir, "subscriptions.json");
+    const original = JSON.stringify([{ ...enabledItem("Unknown", "2026-07-08"), currency: "XYZ" }], null, 2);
+    await writeFile(dataFile, original, "utf8");
+
+    const report = await getDataIntegrityReport(dataFile, { now: new Date(2026, 6, 5, 12, 0, 0) });
+    assert.equal(report.ok, true);
+    assert.equal(report.summary.warnings, 1);
+    assert.equal(await readFile(dataFile, "utf8"), original);
+  });
+
+  it("creates escaped ICS renewal events for enabled subscriptions only", () => {
+    const ics = createRenewalCalendarICS([
+      { ...enabledItem("ChatGPT, Plus", "2026-07-05"), notes: "Line 1\nLine 2; test" },
+      { ...enabledItem("Disabled", "2026-07-05"), isEnabled: false },
+      { ...cycleItem("oneTime", 99, "CNY"), id: "once", name: "One Time", nextRenewalDate: "2026-07-06", isRenewalDateManuallyAdjusted: true }
+    ], { referenceDate: "2026-07-05", generatedAt: new Date("2026-07-05T00:00:00Z") });
+
+    assert.equal(ics.includes("BEGIN:VCALENDAR"), true);
+    assert.equal(ics.includes("订阅续费：ChatGPT\\, Plus"), true);
+    assert.equal(ics.includes("Disabled"), false);
+    assert.equal(ics.includes("订阅续费：One Time（一次性）"), true);
+    assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length >= 13, true);
+    assert.equal(ics.includes("Line 1\\nLine 2\\; test"), true);
   });
 });
 
@@ -417,6 +480,39 @@ describe("subscription data backups", () => {
     const preview = await getBackupPreview(dataFile, backupName);
     assert.equal(preview.subscriptionCount, 1);
     assert.equal(typeof preview.subscriptions[0].renewalStatus.label, "string");
+  });
+});
+
+describe("subscription http API", () => {
+  it("returns integrity and calendar ICS responses with expected headers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-http-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([
+      enabledItem("Calendar", "2026-07-08"),
+      { ...enabledItem("Off", "2026-07-08"), isEnabled: false }
+    ]), "utf8");
+
+    const server = createApp({ dataFile, publicDir: dir });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const integrityResponse = await fetch(baseUrl + "/api/integrity");
+      const integrity = await integrityResponse.json();
+      assert.equal(integrityResponse.status, 200);
+      assert.equal(integrity.ok, true);
+
+      const calendarResponse = await fetch(baseUrl + "/api/calendar.ics");
+      const ics = await calendarResponse.text();
+      assert.equal(calendarResponse.status, 200);
+      assert.equal(calendarResponse.headers.get("content-type").startsWith("text/calendar"), true);
+      assert.equal(calendarResponse.headers.get("content-disposition"), 'attachment; filename="subscriptions-renewals.ics"');
+      assert.equal(ics.includes("订阅续费：Calendar"), true);
+      assert.equal(ics.includes("订阅续费：Off"), false);
+    } finally {
+      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   });
 });
 

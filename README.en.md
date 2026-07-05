@@ -14,6 +14,7 @@ Chinese documentation is the default GitHub README: [README.md](README.md).
 - Enabled subscriptions are sorted first; disabled subscriptions stay at the bottom.
 - Dashboard cards for monthly renewals, renewals within 7 days, enabled count, disabled count, monthly equivalent, and yearly equivalent.
 - Multi-currency summaries without exchange-rate conversion.
+- Currency labels display symbol, ISO code, and Chinese name, such as `¥ / CNY / 人民币`.
 - Urgent renewal summary showing up to 5 enabled subscriptions.
 - JSON import and export.
 - Automatic local backups after every successful save, keeping the newest 20 backups.
@@ -24,6 +25,9 @@ Chinese documentation is the default GitHub README: [README.md](README.md).
 - Quick enable/disable, mark as renewed, and duplicate subscription actions.
 - Status filter, currency filter, and user-selectable sorting.
 - Manual backups, backup download, and restoring from an external backup JSON file.
+- Read-only data integrity checks for local JSON structure, dates, amounts, currencies, and duplicate ids.
+- Backup restore rehearsal hints that encourage downloading and previewing backups periodically.
+- ICS renewal calendar export for the next 12 months of enabled subscription events.
 - Unified status badge system across subscription list, urgent summary, and renewal calendar.
 - Narrow-window friendly desktop-style UI with dark-mode readable status colors.
 
@@ -77,6 +81,10 @@ data/backups/
 
 Automatic backups are named `subscriptions-backup-YYYY-MM-DD-HH-mm-ss.json`; manual backups are named `subscriptions-manual-backup-YYYY-MM-DD-HH-mm-ss.json`; the newest 20 managed backup files are kept. Restore operations create `subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json`; JSON imports create `subscriptions-before-import-YYYY-MM-DD-HH-mm-ss.json` before replacing current data.
 
+## Currency Display
+
+Phase 5 standardizes currency display as symbol, ISO code, and Chinese name, such as `¥ / CNY / 人民币`, `$ / USD / 美元`, `¥ / JPY / 日元`, `€ / EUR / 欧元`, and `HK$ / HKD / 港币`. API data still stores ISO currency codes and no exchange-rate conversion is performed.
+
 ## JSON Import and Export
 
 Exports download as `subscriptions-export-YYYY-MM-DD.json` and remain compatible with import. Import validates JSON format and subscription structure before replacing data.
@@ -93,6 +101,12 @@ The UI includes a backup and restore panel. It can list local backups, create a 
 
 The renewal calendar shows enabled subscriptions renewing in the current month and next month. Overdue items stay in the urgent renewal summary instead of being forced into the calendar.
 
+The UI can export `subscriptions-renewals.ics`, containing future renewal events for enabled subscriptions within the next 12 months. It is a file download only and does not perform cloud or calendar sync.
+
+## Data Integrity Check
+
+The UI includes a read-only data integrity check for `data/subscriptions.json`. It reports empty names, invalid amounts, invalid dates, duplicate ids, unknown currencies, and related issues without automatically modifying local data.
+
 ## Testing
 
 ```bash
@@ -108,6 +122,10 @@ npm test
 - Native macOS Widget
 - Electron packaging
 - Automatic exchange-rate conversion
+
+## Screenshot Validation
+
+Phase 5 allows real-browser visual validation. Screenshots, if kept, should be stored under `docs/screenshots/phase5/` and must not include personal subscription data, browser caches, or tool dependencies.
 
 ## License and Disclaimer
 
