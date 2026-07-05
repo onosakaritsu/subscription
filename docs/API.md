@@ -22,7 +22,7 @@ http://127.0.0.1:5173
 
 返回按管理规则排序后的订阅列表、摘要统计和续费日历分组。每条订阅包含 `renewalStatus`，其中包括 `key`、`label`、`tone`、`priority`、`description` 和 `daysUntilRenewal`。
 
-`calendar.currentMonth` 和 `calendar.nextMonth` 分别表示本月和下月即将续费的启用订阅。
+`calendar.currentMonth` 和 `calendar.nextMonth` 分别表示本月和下月即将续费的启用订阅。金额相关字段仍使用 ISO 币种代码；前端会统一显示为“符号 / ISO 代码 / 中文名称”。
 
 ## 新增订阅
 
@@ -96,6 +96,25 @@ subscriptions-export-YYYY-MM-DD.json
 返回 `data/backups/` 中受管理的 JSON 备份文件。接口只暴露安全文件名，不暴露本地绝对路径。损坏备份会保留在列表中，并标记为不可恢复。
 
 备份类型根据文件名识别：自动备份、手动备份、恢复前备份、导入前备份。
+
+## 数据完整性检查
+
+`GET /api/integrity`
+
+只读检查当前 `data/subscriptions.json`，不会修改、修复或覆盖数据。返回 `ok`、`checkedAt`、`summary` 和 `issues`。检查项包括空名称、负金额、空币种、未知币种 warning、非法计费周期、非法日期、非布尔启用状态、缺失 id、重复 id 和启用订阅缺少下次续费日。
+
+## 续费日历 ICS 导出
+
+`GET /api/calendar.ics`
+
+返回未来 12 个月内启用订阅的续费事件。停用订阅不会导出，一次性项目会在标题中标记“一次性”。响应头：
+
+```text
+Content-Type: text/calendar; charset=utf-8
+Content-Disposition: attachment; filename="subscriptions-renewals.ics"
+```
+
+该接口只生成 `.ics` 文件，不做云同步或系统日历同步。
 
 ## 立即手动备份
 

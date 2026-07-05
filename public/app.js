@@ -1,27 +1,41 @@
 const categories = ["影音娱乐", "效率工具", "云服务", "学习", "健康", "财务", "其他"];
-const currencies = ["CNY", "USD", "EUR", "HKD", "JPY", "GBP"];
+const currencyMetadata = {
+  CNY: { code: "CNY", symbol: "¥", nameZh: "人民币", displayName: "¥ / CNY / 人民币", compactLabel: "¥" },
+  USD: { code: "USD", symbol: "$", nameZh: "美元", displayName: "$ / USD / 美元", compactLabel: "$" },
+  JPY: { code: "JPY", symbol: "¥", nameZh: "日元", displayName: "¥ / JPY / 日元", compactLabel: "¥" },
+  EUR: { code: "EUR", symbol: "€", nameZh: "欧元", displayName: "€ / EUR / 欧元", compactLabel: "€" },
+  HKD: { code: "HKD", symbol: "HK$", nameZh: "港币", displayName: "HK$ / HKD / 港币", compactLabel: "HK$" },
+  GBP: { code: "GBP", symbol: "£", nameZh: "英镑", displayName: "£ / GBP / 英镑", compactLabel: "£" },
+  KRW: { code: "KRW", symbol: "₩", nameZh: "韩元", displayName: "₩ / KRW / 韩元", compactLabel: "₩" },
+  TWD: { code: "TWD", symbol: "NT$", nameZh: "新台币", displayName: "NT$ / TWD / 新台币", compactLabel: "NT$" },
+  AUD: { code: "AUD", symbol: "A$", nameZh: "澳元", displayName: "A$ / AUD / 澳元", compactLabel: "A$" },
+  CAD: { code: "CAD", symbol: "C$", nameZh: "加元", displayName: "C$ / CAD / 加元", compactLabel: "C$" },
+  SGD: { code: "SGD", symbol: "S$", nameZh: "新加坡元", displayName: "S$ / SGD / 新加坡元", compactLabel: "S$" }
+};
+const currencies = Object.keys(currencyMetadata);
 const billingCycles = [["weekly", "每周"], ["monthly", "每月"], ["quarterly", "每季度"], ["semiannual", "每半年"], ["yearly", "每年"], ["oneTime", "一次性"]];
-const currencySymbols = { CNY: "¥", USD: "$", EUR: "€", HKD: "HK$", JPY: "¥", GBP: "£" };
+const zeroDecimalCurrencies = new Set(["JPY", "KRW"]);
 const statusOptions = [["all", "全部状态"], ["overdue", "已过期"], ["today", "今日续费"], ["within3Days", "3日内"], ["within7Days", "7日内"], ["thisMonth", "本月内"], ["normal", "正常"], ["disabled", "已停用"], ["oneTime", "一次性"]];
 const statusClass = { disabled: "status-inactive", overdue: "status-overdue", today: "status-today", within3Days: "status-upcoming-3", within7Days: "status-upcoming-7", thisMonth: "status-this-month", normal: "status-normal", oneTime: "status-one-time" };
 const statusPriority = { overdue: 100, today: 95, within3Days: 90, within7Days: 80, thisMonth: 60, normal: 30, oneTime: 20, disabled: 10 };
 
-const state = { items: [], summary: null, calendar: { currentMonth: [], nextMonth: [] }, backups: [], showAllBackups: false, selectedId: null, filters: { search: "", category: "all", enabled: "all", status: "all", currency: "all", sort: "default" } };
+const state = { items: [], summary: null, calendar: { currentMonth: [], nextMonth: [] }, backups: [], integrity: null, showAllBackups: false, selectedId: null, filters: { search: "", category: "all", enabled: "all", status: "all", currency: "all", sort: "default" } };
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((el) => [el.id, el]));
 
 init();
 
 async function init() {
   fillSelect(els.categoryInput, categories.map((value) => [value, value]));
-  fillSelect(els.currencyInput, currencies.map((value) => [value, value]));
+  fillSelect(els.currencyInput, currencySelectOptions());
   fillSelect(els.billingCycleInput, billingCycles);
   fillSelect(els.categoryFilter, [["all", "全部分类"], ...categories.map((value) => [value, value])]);
   fillSelect(els.statusFilter, statusOptions);
-  fillSelect(els.currencyFilter, [["all", "全部币种"], ...currencies.map((value) => [value, value])]);
+  fillSelect(els.currencyFilter, [["all", "全部币种"], ...currencySelectOptions()]);
   bindEvents();
   setBlankForm(false);
   await loadSubscriptions();
   await loadBackups();
+  renderIntegrity();
 }
 
 function bindEvents() {
@@ -34,6 +48,8 @@ function bindEvents() {
   els.importInput.addEventListener("change", importJSON);
   els.externalRestoreInput.addEventListener("change", restoreExternalBackup);
   els.manualBackupButton.addEventListener("click", createManualBackup);
+  els.calendarExportButton.addEventListener("click", exportICS);
+  els.integrityButton.addEventListener("click", checkIntegrity);
   els.refreshBackupsButton.addEventListener("click", loadBackups);
   els.backupList.addEventListener("click", handleBackupAction);
   els.toggleBackupsButton.addEventListener("click", () => { state.showAllBackups = !state.showAllBackups; renderBackups(); });
@@ -68,6 +84,7 @@ async function loadSubscriptions(selectId = state.selectedId) {
   state.summary = data.summary || emptySummary();
   state.calendar = data.calendar || data.summary?.calendar || { currentMonth: [], nextMonth: [] };
   state.selectedId = state.items.some((item) => item.id === selectId) ? selectId : null;
+  refreshCurrencyControls();
   renderAll();
 }
 function renderAll() { renderSummary(); renderUpcomingSummary(); renderCalendar(); renderList(); }
@@ -85,12 +102,12 @@ function renderSummary() {
 function renderUpcomingSummary() {
   const items = state.summary?.urgentUpcoming || [];
   if (!items.length) { els.upcomingSummaryList.innerHTML = '<div class="empty-state compact"><strong>近期暂无需要关注的续费项目</strong><span>7 日内没有需要处理的启用订阅。</span></div>'; return; }
-  els.upcomingSummaryList.innerHTML = items.slice(0, 5).map((item) => `<div class="upcoming-item ${cardStatusClass(item)}"><span class="status-dot ${statusClassFor(item)}"></span>${renderStatusBadge(item)}<strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(item.renewalStatusText)}</span><span class="amount-text">${escapeHTML(formatMoney(item.amount, item.currency))}</span></div>`).join("");
+  els.upcomingSummaryList.innerHTML = items.slice(0, 5).map((item) => `<div class="upcoming-item ${cardStatusClass(item)}"><span class="status-dot ${statusClassFor(item)}"></span>${renderStatusBadge(item)}<strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(item.renewalStatusText)}</span><span class="amount-text">${escapeHTML(formatCurrencyAmount(item.amount, item.currency))}</span></div>`).join("");
 }
 function renderCalendar() { renderCalendarGroup(els.renewalCalendarCurrent, state.calendar?.currentMonth || []); renderCalendarGroup(els.renewalCalendarNext, state.calendar?.nextMonth || []); }
 function renderCalendarGroup(container, items) {
   if (!items.length) { container.innerHTML = '<div class="empty-state compact"><strong>暂无续费</strong><span>该月份没有启用订阅需要续费。</span></div>'; return; }
-  container.innerHTML = items.map((item) => `<div class="calendar-item ${cardStatusClass(item)}"><strong>${escapeHTML(formatDate(item.nextRenewalDate))}</strong><span class="calendar-name">${escapeHTML(item.name)}</span>${renderStatusBadge(item)}<span class="amount-text">${escapeHTML(formatMoney(item.amount, item.currency))}</span></div>`).join("");
+  container.innerHTML = items.map((item) => `<div class="calendar-item ${cardStatusClass(item)}"><strong>${escapeHTML(formatDate(item.nextRenewalDate))}</strong><span class="calendar-name">${escapeHTML(item.name)}</span>${renderStatusBadge(item)}<span class="amount-text">${escapeHTML(formatCurrencyAmount(item.amount, item.currency))}</span></div>`).join("");
 }
 function renderList() {
   const items = filteredItems();
@@ -106,7 +123,7 @@ function renderSubscriptionCard(item) {
       <div class="meta-line"><span>${escapeHTML(item.category)}</span><span>${escapeHTML(cycleLabel(item.billingCycle))}</span><span>开始 ${escapeHTML(formatDate(item.startDate))}</span></div>
       ${item.notes ? `<p class="note-line">${escapeHTML(item.notes)}</p>` : ""}
     </div>
-    <div class="card-side"><span>${escapeHTML(item.renewalStatusText || "续费")}</span><strong>${escapeHTML(formatDate(item.nextRenewalDate))}</strong><span>${escapeHTML(formatMoney(item.amount, item.currency))}</span></div>
+    <div class="card-side"><span>${escapeHTML(item.renewalStatusText || "续费")}</span><strong>${escapeHTML(formatDate(item.nextRenewalDate))}</strong><span class="money-compact" title="${escapeHTML(formatCurrencyAmount(item.amount, item.currency))}">${escapeHTML(formatCurrencyAmount(item.amount, item.currency, { style: "compact" }))}</span><span class="money-meta">${escapeHTML(formatCurrencyMetaLabel(item.currency))}</span></div>
     <div class="card-actions">
       <button class="secondary" type="button" data-action="edit" data-id="${escapeHTML(item.id)}">编辑</button>
       <button class="secondary" type="button" data-action="copy" data-id="${escapeHTML(item.id)}">复制</button>
@@ -125,7 +142,7 @@ function filteredItems() {
     if (f.status !== "all" && item.renewalStatus?.key !== f.status) return false;
     if (f.currency !== "all" && item.currency !== f.currency) return false;
     if (!f.search) return true;
-    return [item.name, item.category, item.notes, item.currency].join(" ").toLowerCase().includes(f.search);
+    return [item.name, item.category, item.notes, item.currency, formatCurrencyLabel(item.currency), formatCurrencyMetaLabel(item.currency)].join(" ").toLowerCase().includes(f.search);
   });
   return filtered.sort((a, b) => compareItems(a, b, f.sort));
 }
@@ -153,7 +170,7 @@ function closeDialog() { els.subscriptionDialog.close(); }
 function fillForm(item) {
   state.selectedId = item.id || null;
   els.formTitle.textContent = state.selectedId ? "编辑订阅" : "新增订阅";
-  els.formHint.textContent = `${formatMoney(item.amount, item.currency)} · ${cycleLabel(item.billingCycle)}`;
+  els.formHint.textContent = `${formatCurrencyAmount(item.amount, item.currency)} · ${cycleLabel(item.billingCycle)}`;
   els.nameInput.value = item.name || ""; els.categoryInput.value = item.category || "效率工具"; els.amountInput.value = item.amount ?? 0; els.currencyInput.value = item.currency || "CNY"; els.billingCycleInput.value = item.billingCycle || "monthly"; els.startDateInput.value = item.startDate || localDateISO(); els.nextRenewalInput.value = item.nextRenewalDate || calculateNextRenewalDate(els.startDateInput.value, els.billingCycleInput.value); els.manualRenewalInput.checked = Boolean(item.isRenewalDateManuallyAdjusted); els.enabledInput.checked = item.isEnabled !== false; els.notesInput.value = item.notes || "";
   els.deleteButton.classList.toggle("hidden", !state.selectedId);
 }
@@ -180,17 +197,34 @@ function formPayload() { return { name: els.nameInput.value, category: els.categ
 function copyDraft(item) { return { ...item, name: `${item.name || "未命名订阅"} 副本`, isRenewalDateManuallyAdjusted: item.isRenewalDateManuallyAdjusted }; }
 
 async function exportJSON() { const response = await fetch("/api/export"); const blob = await response.blob(); downloadBlob(blob, exportFileName()); }
+async function exportICS() { if (!state.items.some((item) => item.isEnabled)) { showToast("没有可导出的启用订阅", true); return; } const response = await fetch("/api/calendar.ics"); if (!response.ok) { showToast("续费日历导出失败", true); return; } downloadBlob(await response.blob(), "subscriptions-renewals.ics"); }
 async function importJSON() { const file = els.importInput.files?.[0]; if (!file) return; try { const json = await readJSONFile(file); const result = await api("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) }); showToast("已导入 " + result.items.length + " 项订阅"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch (error) { showToast(error.message || "导入失败，当前数据未被修改", true); } finally { els.importInput.value = ""; } }
 async function restoreExternalBackup() { const file = els.externalRestoreInput.files?.[0]; if (!file) return; try { const json = await readJSONFile(file); if (!confirm("恢复前会自动备份当前数据。确认要使用所选文件覆盖当前订阅数据吗？")) return; const result = await api("/api/backups/restore-uploaded", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) }); showToast("已从外部备份恢复订阅数据"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch (error) { showToast(error.message || "恢复失败，请检查备份文件或查看服务端日志", true); } finally { els.externalRestoreInput.value = ""; } }
 async function readJSONFile(file) { const text = await file.text(); try { return JSON.parse(text); } catch { throw new Error("JSON 格式无效"); } }
 async function createManualBackup() { try { await api("/api/backups", { method: "POST" }); showToast("已创建手动备份"); await loadBackups(); } catch { showToast("手动备份失败，请查看服务端日志", true); } }
-async function loadBackups() { const data = await api("/api/backups"); state.backups = data.backups || []; renderBackups(); }
+async function loadBackups() { const data = await api("/api/backups"); state.backups = data.backups || []; renderBackups(); renderBackupDrillHint(); }
 function renderBackups() { const backups = state.showAllBackups ? state.backups : state.backups.slice(0, 10); els.backupList.innerHTML = backups.map(renderBackupRow).join(""); els.emptyBackups.classList.toggle("hidden", state.backups.length > 0); els.toggleBackupsButton.classList.toggle("hidden", state.backups.length <= 10); els.toggleBackupsButton.textContent = state.showAllBackups ? "收起" : "显示全部"; }
+function renderBackupDrillHint() { if (!els.backupDrillHint) return; if (!state.backups.length) { els.backupDrillHint.textContent = "当前还没有可用备份。建议先点击“立即备份”。"; els.backupDrillHint.className = "backup-drill-hint tone-caution"; return; } const latest = state.backups[0]; const days = Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000); if (days > 30) { els.backupDrillHint.textContent = "最近一次备份已超过 30 天，建议创建新的手动备份。"; els.backupDrillHint.className = "backup-drill-hint tone-caution"; return; } els.backupDrillHint.textContent = "建议定期下载备份 JSON，并在恢复前通过预览功能确认备份内容。"; els.backupDrillHint.className = "backup-drill-hint"; }
 function renderBackupRow(backup) { return `<div class="backup-item"><div class="backup-main"><strong>${escapeHTML(backup.type?.label || "自动备份")} · ${escapeHTML(formatDateTime(backup.createdAt))}</strong><span>${escapeHTML(backup.fileName)}</span></div><div class="backup-meta"><span>${escapeHTML(formatFileSize(backup.size))}</span><span>${escapeHTML(String(backup.subscriptionCount || 0) + " 项")}</span>${backup.isValid === false ? '<span class="backup-invalid">不可恢复</span>' : '<span class="backup-valid">可恢复</span>'}</div><div class="backup-actions"><button class="secondary" type="button" data-action="preview" data-file="${escapeHTML(backup.fileName)}">预览</button><button class="secondary" type="button" data-action="download" data-file="${escapeHTML(backup.fileName)}">下载</button><button class="danger" type="button" data-action="restore" data-file="${escapeHTML(backup.fileName)}" ${backup.isValid === false ? "disabled" : ""}>恢复</button></div></div>`; }
 async function handleBackupAction(event) { const button = event.target.closest("button[data-action]"); if (!button) return; const fileName = button.dataset.file; if (button.dataset.action === "preview") return previewBackup(fileName); if (button.dataset.action === "download") return downloadBackup(fileName); if (button.dataset.action === "restore") return restoreBackup(fileName); }
-async function previewBackup(fileName) { try { const backup = await api("/api/backups/" + encodeURIComponent(fileName)); els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = `<div class="preview-heading"><strong>备份预览</strong><span>${escapeHTML(backup.fileName)} · ${escapeHTML(String(backup.subscriptionCount || 0) + " 项")}</span></div>${(backup.subscriptions || []).slice(0, 8).map((item) => `<div class="preview-row"><strong>${escapeHTML(item.name || "未命名订阅")}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(formatMoney(item.amount, item.currency))}</span></div>`).join("") || '<div class="empty-state compact"><strong>空备份</strong><span>该备份内没有订阅。</span></div>'}`; } catch { els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = '<strong>无法预览该备份</strong><span>备份文件可能已损坏。</span>'; } }
+async function previewBackup(fileName) { try { const backup = await api("/api/backups/" + encodeURIComponent(fileName)); els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = `<div class="preview-heading"><strong>备份预览</strong><span>${escapeHTML(backup.fileName)} · ${escapeHTML(String(backup.subscriptionCount || 0) + " 项")}</span></div>${(backup.subscriptions || []).slice(0, 8).map((item) => `<div class="preview-row"><strong>${escapeHTML(item.name || "未命名订阅")}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(formatCurrencyAmount(item.amount, item.currency))}</span></div>`).join("") || '<div class="empty-state compact"><strong>空备份</strong><span>该备份内没有订阅。</span></div>'}`; } catch { els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = '<strong>无法预览该备份</strong><span>备份文件可能已损坏。</span>'; } }
 async function downloadBackup(fileName) { const response = await fetch("/api/backups/" + encodeURIComponent(fileName) + "/download"); if (!response.ok) { showToast("备份下载失败", true); return; } downloadBlob(await response.blob(), fileName); }
 async function restoreBackup(fileName) { if (!confirm("恢复前会自动备份当前数据。确认要使用该备份覆盖当前订阅数据吗？")) return; try { const result = await api("/api/backups/" + encodeURIComponent(fileName) + "/restore", { method: "POST" }); showToast("已从备份恢复订阅数据"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch { showToast("恢复失败，请检查备份文件或查看服务端日志", true); } }
+
+async function checkIntegrity() { try { state.integrity = await api("/api/integrity"); renderIntegrity(); showToast(state.integrity.ok ? "数据完整性检查通过" : "数据完整性检查发现问题"); } catch (error) { showToast(error.message || "完整性检查失败", true); } }
+function renderIntegrity() {
+  const report = state.integrity;
+  if (!report) {
+    els.integrityResult.innerHTML = '<div class="empty-state compact"><strong>尚未检查</strong><span>点击“立即检查”后会读取本地 JSON 并列出异常。</span></div>';
+    return;
+  }
+  const s = report.summary || {};
+  const tone = s.errors ? "tone-danger" : s.warnings ? "tone-caution" : "tone-success";
+  const headline = s.errors ? "发现错误" : s.warnings ? "发现警告" : "正常";
+  const issues = report.issues || [];
+  els.integrityResult.innerHTML = `<div class="integrity-summary ${tone}"><strong>${headline}</strong><span>总计 ${s.total || 0} 项 · 有效 ${s.valid || 0} 项 · 警告 ${s.warnings || 0} · 错误 ${s.errors || 0}</span><span>检查时间 ${escapeHTML(formatDateTime(report.checkedAt))}</span></div>${issues.length ? `<div class="integrity-issues">${issues.map(renderIntegrityIssue).join("")}</div>` : '<div class="empty-state compact"><strong>当前数据未发现明显异常</strong><span>完整性检查不会自动修改你的数据。</span></div>'}`;
+}
+function renderIntegrityIssue(issue) { const tone = issue.level === "error" ? "status-overdue" : "status-upcoming-7"; return `<div class="integrity-issue"><span class="status-badge ${tone}">${escapeHTML(issue.level === "error" ? "错误" : "警告")}</span><strong>${escapeHTML(issue.subscriptionName || issue.subscriptionId || "未命名订阅")}</strong><span>${escapeHTML(issue.message || issue.type)}</span></div>`; }
 
 async function api(path, options = {}) { const response = await fetch(path, options); const data = await response.json().catch(() => ({})); if (!response.ok) { throw new Error(data.error || "请求失败"); } return data; }
 function downloadBlob(blob, fileName) { const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = fileName; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url); }
@@ -198,6 +232,9 @@ function renderStatusBadge(item) { const status = item.renewalStatus || { key: i
 function statusClassFor(item) { return statusClass[item.renewalStatus?.key] || "status-normal"; }
 function cardStatusClass(item) { const key = item.renewalStatus?.key || "normal"; if (key === "disabled") return "is-inactive"; if (key === "overdue") return "is-overdue"; if (key === "today") return "is-today"; if (key === "within3Days") return "is-upcoming-3"; if (key === "within7Days") return "is-upcoming-7"; if (key === "thisMonth") return "is-this-month"; if (key === "oneTime") return "is-one-time"; return "is-normal"; }
 function fillSelect(select, options) { select.innerHTML = options.map(([value, label]) => `<option value="${escapeHTML(value)}">${escapeHTML(label)}</option>`).join(""); }
+function refreshCurrencyControls() { const formValue = els.currencyInput.value || "CNY"; const filterValue = els.currencyFilter.value || "all"; const options = currencySelectOptions(existingCurrencies()); fillSelect(els.currencyInput, options); els.currencyInput.value = existingCurrencies().includes(formValue) ? formValue : (formValue || "CNY"); fillSelect(els.currencyFilter, [["all", "全部币种"], ...options]); els.currencyFilter.value = existingCurrencies().includes(filterValue) ? filterValue : "all"; }
+function existingCurrencies() { return [...new Set([...currencies, ...state.items.map((item) => normalizeCurrencyCode(item.currency)).filter(Boolean)])]; }
+function currencySelectOptions(codes = currencies) { return codes.map((code) => [code, formatCurrencyLabel(code)]); }
 function calculateNextRenewalDate(startDate, cycle) { if (!startDate) return ""; if (cycle === "oneTime") return startDate; let candidate = addCycle(startDate, cycle); const today = localDateISO(); while (candidate < today) candidate = addCycle(candidate, cycle); return candidate; }
 function addCycle(dateISO, cycle) { if (cycle === "weekly") { const d = parseLocalDate(dateISO); d.setDate(d.getDate() + 7); return toISODate(d); } if (cycle === "quarterly") return addMonths(dateISO, 3); if (cycle === "semiannual") return addMonths(dateISO, 6); if (cycle === "yearly") return addMonths(dateISO, 12); return addMonths(dateISO, 1); }
 function addMonths(dateISO, months) { const date = parseLocalDate(dateISO); const day = date.getDate(); const targetMonth = date.getMonth() + months; const daysInTargetMonth = new Date(date.getFullYear(), targetMonth + 1, 0).getDate(); return toISODate(new Date(date.getFullYear(), targetMonth, Math.min(day, daysInTargetMonth))); }
@@ -206,8 +243,12 @@ function localDateISO(date = new Date()) { return toISODate(date); }
 function toISODate(date) { return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-"); }
 function exportFileName(date = new Date()) { return "subscriptions-export-" + localDateISO(date) + ".json"; }
 function cycleLabel(value) { return billingCycles.find(([cycle]) => cycle === value)?.[1] || value; }
-function formatCurrencyTotals(totals = {}) { const entries = Object.entries(totals); if (!entries.length) return '<span class="muted-value">暂无</span>'; return entries.map(([currency, amount]) => `<span class="currency-line">${escapeHTML(currency + " " + Number(amount || 0).toFixed(2))}</span>`).join(""); }
-function formatMoney(amount, currency) { return (currencySymbols[currency] || "") + Number(amount || 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 }) + " " + currency; }
+function formatCurrencyTotals(totals = {}) { const entries = Object.entries(totals); if (!entries.length) return '<span class="muted-value">暂无</span>'; return entries.map(([currency, amount]) => `<span class="currency-line">${escapeHTML(formatCurrencyAmount(amount, currency))}</span>`).join(""); }
+function normalizeCurrencyCode(value) { return String(value ?? "").trim().toUpperCase(); }
+function getCurrencyMeta(code) { const normalized = normalizeCurrencyCode(code); const known = currencyMetadata[normalized]; if (known) return { ...known, isKnown: true }; return { code: normalized || "UNKNOWN", symbol: normalized, nameZh: "其他币种", displayName: normalized ? `${normalized} / 其他币种` : "未知币种", compactLabel: normalized, isKnown: false }; }
+function formatCurrencyLabel(currency) { return getCurrencyMeta(currency).displayName; }
+function formatCurrencyMetaLabel(currency) { const meta = getCurrencyMeta(currency); return `${meta.code} · ${meta.nameZh}`; }
+function formatCurrencyAmount(amount, currency, options = {}) { const numeric = Number(amount); if (!Number.isFinite(numeric)) return "—"; const meta = getCurrencyMeta(currency); const fractionDigits = zeroDecimalCurrencies.has(meta.code) ? 0 : 2; const value = numeric.toLocaleString("zh-CN", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits }); if (options.style === "compact") return `${meta.compactLabel || meta.code}${value}`; return `${meta.symbol ? meta.symbol + " " : ""}${value} · ${meta.code} · ${meta.nameZh}`; }
 function formatDate(value) { if (!value) return "--"; const [, month, day] = value.split("-"); return month + "/" + day; }
 function formatDateTime(value) { if (!value) return "--"; return new Date(value).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 function formatFileSize(size) { const value = Number(size || 0); return value < 1024 ? value + " B" : (value / 1024).toFixed(1) + " KB"; }
