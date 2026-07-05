@@ -20,14 +20,9 @@ http://127.0.0.1:5173
 
 `GET /api/subscriptions`
 
-返回按管理规则排序后的订阅列表、摘要统计和续费日历分组。每条订阅会包含以下派生续费状态字段：
+返回按管理规则排序后的订阅列表、摘要统计和续费日历分组。每条订阅包含 `renewalStatus`，其中包括 `key`、`label`、`tone`、`priority`、`description` 和 `daysUntilRenewal`。
 
-- `renewalStatus.key`
-- `renewalStatus.label`
-- `renewalStatus.daysUntilRenewal`
-- `renewalStatusText`
-
-响应中的 `calendar.currentMonth` 和 `calendar.nextMonth` 分别表示本月和下月即将续费的启用订阅。
+`calendar.currentMonth` 和 `calendar.nextMonth` 分别表示本月和下月即将续费的启用订阅。
 
 ## 新增订阅
 
@@ -50,20 +45,29 @@ http://127.0.0.1:5173
 }
 ```
 
-支持的计费周期：
-
-- `weekly`
-- `monthly`
-- `quarterly`
-- `semiannual`
-- `yearly`
-- `oneTime`
+支持的计费周期：`weekly`、`monthly`、`quarterly`、`semiannual`、`yearly`、`oneTime`。
 
 ## 更新订阅
 
 `PUT /api/subscriptions/:id`
 
-请求体与新增订阅一致。
+请求体与新增订阅一致。服务端会校验名称、金额、币种、计费周期、日期和启用状态。
+
+## 快速启用 / 停用
+
+`PATCH /api/subscriptions/:id`
+
+请求体：
+
+```json
+{"isEnabled":false}
+```
+
+## 确认已续费
+
+`POST /api/subscriptions/:id/renew`
+
+将周期性订阅的下次续费日推进到今天之后的下一个有效续费日。一次性项目会被拒绝。
 
 ## 删除订阅
 
@@ -76,7 +80,7 @@ http://127.0.0.1:5173
 以 JSON 文件下载全部订阅。默认下载文件名为：
 
 ```text
-subscriptions-backup-YYYY-MM-DD.json
+subscriptions-export-YYYY-MM-DD.json
 ```
 
 ## 导入
@@ -91,20 +95,29 @@ subscriptions-backup-YYYY-MM-DD.json
 
 返回 `data/backups/` 中受管理的 JSON 备份文件。接口只暴露安全文件名，不暴露本地绝对路径。损坏备份会保留在列表中，并标记为不可恢复。
 
-返回字段包括：
+备份类型根据文件名识别：自动备份、手动备份、恢复前备份、导入前备份。
 
-- `fileName`：备份文件名。
-- `createdAt`：从文件名解析出的创建时间。
-- `size`：文件大小，单位为字节。
-- `subscriptionCount`：备份内订阅数量；损坏备份为 0。
-- `isValid`：是否可恢复。
-- `error`：不可恢复原因。
+## 立即手动备份
+
+`POST /api/backups`
+
+立即为当前 `data/subscriptions.json` 创建手动备份。文件名格式：
+
+```text
+subscriptions-manual-backup-YYYY-MM-DD-HH-mm-ss.json
+```
 
 ## 预览备份
 
 `GET /api/backups/:fileName`
 
 返回指定备份的摘要和订阅列表预览。`fileName` 必须是合法备份文件名，禁止 `../` 等路径穿越。损坏备份会返回明确错误，不会修改主数据文件。
+
+## 下载备份
+
+`GET /api/backups/:fileName/download`
+
+下载指定备份 JSON。损坏备份也允许下载。响应头包含 `Content-Type: application/json` 和 `Content-Disposition`，不会暴露服务器绝对路径。
 
 ## 恢复备份
 
@@ -117,3 +130,13 @@ subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json
 ```
 
 恢复流程会先校验目标备份 JSON 和订阅数据结构。目标备份损坏或路径不合法时不会覆盖当前数据。
+
+## 从外部备份恢复
+
+`POST /api/backups/restore-uploaded`
+
+通过 JSON body 传入前端解析后的订阅数组，不使用 multipart 上传。服务端会再次校验结构，恢复前自动备份当前数据；失败时不会覆盖当前数据。
+
+## 许可证
+
+项目代码按 Apache License 2.0 发布。API 文档仅描述本地接口行为，详细许可和免责声明见根目录 `LICENSE` 与 `DISCLAIMER.md`。

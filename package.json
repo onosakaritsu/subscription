@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "description": "Local-first subscription manager web app with JSON storage.",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/onosakaritsu/subscription.git"

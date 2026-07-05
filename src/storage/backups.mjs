@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 export const maxBackupFiles = 20;
 
-const backupNamePattern = /^subscriptions-(backup|before-restore|before-import)-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.json$/;
+const backupNamePattern = /^subscriptions-(backup|manual-backup|before-restore|before-import)-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.json$/;
 
 export function backupDirectoryFor(dataFile) {
   return join(dirname(dataFile), "backups");
@@ -11,6 +11,10 @@ export function backupDirectoryFor(dataFile) {
 
 export function backupFileName(now = new Date()) {
   return timestampedBackupFileName("backup", now);
+}
+
+export function manualBackupFileName(now = new Date()) {
+  return timestampedBackupFileName("manual-backup", now);
 }
 
 export function beforeRestoreBackupFileName(now = new Date()) {
@@ -23,6 +27,15 @@ export function beforeImportBackupFileName(now = new Date()) {
 
 export function isManagedBackupFileName(fileName) {
   return typeof fileName === "string" && basename(fileName) === fileName && backupNamePattern.test(fileName);
+}
+
+export function backupTypeFromFileName(fileName) {
+  const match = fileName.match(backupNamePattern);
+  const type = match?.[1];
+  if (type === "manual-backup") return { key: "manual", label: "手动备份" };
+  if (type === "before-restore") return { key: "beforeRestore", label: "恢复前备份" };
+  if (type === "before-import") return { key: "beforeImport", label: "导入前备份" };
+  return { key: "auto", label: "自动备份" };
 }
 
 export function safeBackupPath(backupDir, fileName) {
@@ -53,6 +66,15 @@ export async function createDataBackup(dataFile, items, options = {}) {
   await writeFile(targetFile, JSON.stringify(items, null, 2) + "\n", "utf8");
   await pruneBackups(backupDir, options.maxFiles ?? maxBackupFiles);
   return targetFile;
+}
+
+export async function createManualBackup(dataFile, items, options = {}) {
+  const now = options.now ?? new Date();
+  return createDataBackup(dataFile, items, {
+    ...options,
+    now,
+    fileName: options.fileName ?? manualBackupFileName(now)
+  });
 }
 
 export async function createBeforeRestoreBackup(dataFile, items, options = {}) {
@@ -96,6 +118,12 @@ export async function listBackupFiles(backupDir) {
   return backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.fileName.localeCompare(a.fileName));
 }
 
+export async function readBackupDownload(backupDir, fileName) {
+  const filePath = safeBackupPath(backupDir, fileName);
+  const [fileStat, text] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
+  return { fileName, filePath, size: fileStat.size, content: text };
+}
+
 export async function readBackupFile(backupDir, fileName) {
   const filePath = safeBackupPath(backupDir, fileName);
   const [fileStat, text] = await Promise.all([stat(filePath), readFile(filePath, "utf8")]);
@@ -103,6 +131,7 @@ export async function readBackupFile(backupDir, fileName) {
   return {
     fileName,
     createdAt: createdAtFromFileName(fileName),
+    type: backupTypeFromFileName(fileName),
     size: fileStat.size,
     subscriptionCount: parsed.length,
     subscriptions: parsed
@@ -127,6 +156,7 @@ async function describeBackupFile(backupDir, fileName) {
   const base = {
     fileName,
     createdAt: createdAtFromFileName(fileName),
+    type: backupTypeFromFileName(fileName),
     size: fileStat.size
   };
 

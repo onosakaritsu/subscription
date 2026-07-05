@@ -5,11 +5,15 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   calculateNextRenewalDate,
+  copySubscriptionDraft,
   exportSubscriptionFileName,
+  filterAndSortSubscriptions,
+  getStatusMeta,
   monthlyEquivalent,
   normalizeSubscription,
   renewalCalendarGroups,
   renewalStatus,
+  renewSubscription,
   sortForManagement,
   summarizeSubscriptions,
   upcomingRenewals,
@@ -18,14 +22,21 @@ import {
 import {
   backupFileName,
   createDataBackup,
+  createManualBackup,
   listBackupFiles,
+  manualBackupFileName,
   pruneBackups,
+  readBackupDownload,
   readBackupFile
 } from "../src/storage/backups.mjs";
 import {
+  createManualBackupForDataFile,
   getBackupPreview,
   importJSONTextToDataFile,
-  restoreBackupToDataFile
+  restoreBackupToDataFile,
+  restoreUploadedBackupToDataFile,
+  renewSubscriptionById,
+  updateSubscriptionEnabled
 } from "../src/server.mjs";
 
 describe("subscription domain", () => {
@@ -124,15 +135,159 @@ describe("subscription domain", () => {
     assert.deepEqual(calendar.nextMonth.map((item) => item.name), ["Next"]);
   });
 
+
+  it("returns status metadata with label tone and priority", () => {
+    assert.deepEqual(getStatusMeta("overdue"), {
+      statusKey: "overdue",
+      label: "已过期",
+      tone: "danger",
+      priority: 100,
+      description: "续费日期早于今天"
+    });
+    assert.equal(getStatusMeta("within7Days").label, "7日内");
+    assert.equal(getStatusMeta("oneTime").tone, "purple");
+  });
+
+  it("recognizes one-time projects as a separate status", () => {
+    const item = cycleItem("oneTime", 99, "USD");
+    assert.equal(renewalStatus(item, "2026-07-02").key, "oneTime");
+  });
+
+  it("filters by status and currency and searches name category notes and currency", () => {
+    const items = [
+      { ...enabledItem("Overdue", "2026-07-01"), currency: "USD", notes: "alpha" },
+      { ...enabledItem("Normal", "2026-08-20"), currency: "CNY", category: "云服务", notes: "beta" },
+      { ...enabledItem("Disabled", "2026-07-02"), isEnabled: false, currency: "JPY" }
+    ];
+    assert.deepEqual(filterAndSortSubscriptions(items, { status: "overdue" }, "2026-07-02").map((item) => item.name), ["Overdue"]);
+    assert.deepEqual(filterAndSortSubscriptions(items, { currency: "CNY" }, "2026-07-02").map((item) => item.name), ["Normal"]);
+    assert.deepEqual(filterAndSortSubscriptions(items, { search: "beta" }, "2026-07-02").map((item) => item.name), ["Normal"]);
+    assert.deepEqual(filterAndSortSubscriptions(items, { search: "jpy" }, "2026-07-02").map((item) => item.name), ["Disabled"]);
+  });
+
+  it("sorts filtered subscriptions by amount name and renewal date", () => {
+    const items = [enabledItem("B", "2026-07-10"), { ...enabledItem("A", "2026-07-12"), amount: 30 }, { ...enabledItem("C", "2026-07-08"), amount: 5 }];
+    assert.deepEqual(filterAndSortSubscriptions(items, { sort: "amount-desc" }, "2026-07-02").map((item) => item.name), ["A", "B", "C"]);
+    assert.deepEqual(filterAndSortSubscriptions(items, { sort: "name-asc" }, "2026-07-02").map((item) => item.name), ["A", "B", "C"]);
+    assert.deepEqual(filterAndSortSubscriptions(items, { sort: "renewal-desc" }, "2026-07-02").map((item) => item.name), ["A", "B", "C"]);
+  });
+
+  it("renews overdue subscriptions until the next date is after today", () => {
+    const renewed = renewSubscription(enabledItem("Old", "2026-01-01"), "2026-07-05", new Date(2026, 6, 5));
+    assert.equal(renewed.nextRenewalDate > "2026-07-05", true);
+  });
+
+  it("rejects renewal for one-time projects and creates copy drafts without ids", () => {
+    assert.throws(() => renewSubscription(cycleItem("oneTime", 99), "2026-07-05"), /一次性项目不能确认续费/);
+    const draft = copySubscriptionDraft(enabledItem("Cloud", "2026-07-10"));
+    assert.equal(draft.name, "Cloud 副本");
+    assert.equal("id" in draft, false);
+  });
+
+  it("rejects invalid subscription data", () => {
+    assert.throws(() => normalizeSubscription({ ...enabledItem("", "2026-07-02"), name: "" }), /订阅名称不能为空/);
+    assert.throws(() => normalizeSubscription({ ...enabledItem("Bad", "2026-07-02"), amount: -1 }), /金额必须/);
+    assert.throws(() => normalizeSubscription({ ...enabledItem("Bad", "2026-07-02"), billingCycle: "bad" }), /计费周期不符合要求/);
+    assert.throws(() => normalizeSubscription({ ...enabledItem("Bad", "2026-07-02"), startDate: "2026-02-31" }), /日期不存在/);
+  });
+
   it("formats export file names with the local date", () => {
     assert.equal(
       exportSubscriptionFileName(new Date(2026, 6, 2, 8, 9, 5)),
-      "subscriptions-backup-2026-07-02.json"
+      "subscriptions-export-2026-07-02.json"
     );
   });
 });
 
 describe("subscription data backups", () => {
+
+  it("generates manual backup file names", () => {
+    assert.equal(manualBackupFileName(new Date(2026, 6, 5, 9, 30, 12)), "subscriptions-manual-backup-2026-07-05-09-30-12.json");
+  });
+
+  it("creates manual backups and includes them in pruning", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-manual-backup-"));
+    const dataFile = join(dir, "subscriptions.json");
+    for (let index = 1; index <= 21; index += 1) {
+      await createManualBackup(dataFile, [enabledItem("A", "2026-07-02")], { now: new Date(2026, 6, 5, 9, 30, index) });
+    }
+    const backups = await listBackupFiles(join(dir, "backups"));
+    assert.equal(backups.length, 20);
+    assert.equal(backups[0].type.label, "手动备份");
+  });
+
+  it("downloads an existing backup and rejects missing or traversal downloads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-download-backup-"));
+    const backupDir = join(dir, "backups");
+    await mkdir(backupDir, { recursive: true });
+    const name = "subscriptions-backup-2026-07-05-09-30-12.json";
+    await writeFile(join(backupDir, name), "[]", "utf8");
+    const download = await readBackupDownload(backupDir, name);
+    assert.equal(download.fileName, name);
+    assert.equal(download.content, "[]");
+    await assert.rejects(() => readBackupDownload(backupDir, "subscriptions-backup-2026-07-05-09-30-13.json"), { code: "ENOENT" });
+    await assert.rejects(() => readBackupDownload(backupDir, "../" + name), /备份文件名不合法/);
+  });
+
+  it("creates manual backups through the server helper", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-manual-helper-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([enabledItem("Current", "2026-07-08")]), "utf8");
+    const backup = await createManualBackupForDataFile(dataFile, { now: new Date(2026, 6, 5, 9, 30, 12) });
+    assert.equal(backup.fileName, "subscriptions-manual-backup-2026-07-05-09-30-12.json");
+    assert.equal(backup.subscriptionCount, 1);
+  });
+
+  it("restores uploaded backups and protects current data first", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-upload-restore-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([enabledItem("Current", "2026-07-08")]), "utf8");
+    await restoreUploadedBackupToDataFile(dataFile, JSON.stringify([enabledItem("Uploaded", "2026-07-12")]), { now: new Date(2026, 6, 5, 9, 40, 0) });
+    const data = JSON.parse(await readFile(dataFile, "utf8"));
+    const backups = await readdir(join(dir, "backups"));
+    assert.equal(data[0].name, "Uploaded");
+    assert.equal(backups.includes("subscriptions-before-restore-2026-07-05-09-40-00.json"), true);
+  });
+
+  it("does not overwrite current data when uploaded backup JSON or structure is invalid", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-upload-invalid-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([enabledItem("Current", "2026-07-08")]), "utf8");
+    await assert.rejects(() => restoreUploadedBackupToDataFile(dataFile, "{broken"), /JSON 格式无效/);
+    await assert.rejects(() => restoreUploadedBackupToDataFile(dataFile, JSON.stringify({ bad: true })), /订阅数据结构不符合要求/);
+    const data = JSON.parse(await readFile(dataFile, "utf8"));
+    assert.equal(data[0].name, "Current");
+  });
+
+  it("quickly enables and disables subscriptions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-toggle-"));
+    const dataFile = join(dir, "subscriptions.json");
+    const item = { ...enabledItem("Toggle", "2026-07-08"), isEnabled: true };
+    await writeFile(dataFile, JSON.stringify([item]), "utf8");
+    let result = await updateSubscriptionEnabled(dataFile, item.id, false);
+    assert.equal(result.item.isEnabled, false);
+    result = await updateSubscriptionEnabled(dataFile, item.id, true);
+    assert.equal(result.item.isEnabled, true);
+  });
+
+  it("renews subscriptions through the server helper", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-renew-helper-"));
+    const dataFile = join(dir, "subscriptions.json");
+    const item = enabledItem("Renew", "2026-01-01");
+    await writeFile(dataFile, JSON.stringify([item]), "utf8");
+    const result = await renewSubscriptionById(dataFile, item.id, "2026-07-05", new Date(2026, 6, 5));
+    assert.equal(result.item.nextRenewalDate > "2026-07-05", true);
+  });
+
+  it("rejects invalid import structures without overwriting current data", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-import-invalid-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([enabledItem("Current", "2026-07-08")]), "utf8");
+    await assert.rejects(() => importJSONTextToDataFile(dataFile, JSON.stringify([{ name: "Bad", amount: -1, currency: "USD", billingCycle: "monthly", startDate: "2026-07-02" }])), /订阅数据结构不符合要求/);
+    const data = JSON.parse(await readFile(dataFile, "utf8"));
+    assert.equal(data[0].name, "Current");
+  });
+
   it("generates timestamped backup file names", () => {
     assert.equal(
       backupFileName(new Date(2026, 6, 2, 8, 9, 5)),

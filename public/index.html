@@ -8,180 +8,142 @@
   </head>
   <body>
     <main class="app-shell">
-      <aside class="sidebar">
-        <header class="brand">
-          <div>
-            <h1>订阅管理</h1>
-            <p id="statusText">正在载入数据</p>
-          </div>
-          <button id="newButton" class="icon-button primary" type="button" aria-label="新增订阅" title="新增订阅">+</button>
-        </header>
+      <header class="hero-panel">
+        <div>
+          <h1>订阅管理</h1>
+          <p id="statusText">记录、统计和保护你的本地订阅数据</p>
+        </div>
+        <div class="hero-actions">
+          <button id="newButton" class="primary" type="button">新增订阅</button>
+        </div>
+      </header>
 
-        <section class="metrics" aria-label="订阅概览">
-          <div class="metric priority">
-            <span>本月需续费</span>
-            <strong id="thisMonthCount">0</strong>
-          </div>
-          <div class="metric priority">
-            <span>7日内续费</span>
-            <strong id="within7Count">0</strong>
-          </div>
-          <div class="metric">
-            <span>启用订阅</span>
-            <strong id="enabledCount">0</strong>
-          </div>
-          <div class="metric">
-            <span>停用订阅</span>
-            <strong id="disabledCount">0</strong>
-          </div>
-          <div class="metric amount-card">
-            <span>月度折算</span>
-            <strong id="monthlySummary">暂无</strong>
-          </div>
-          <div class="metric amount-card">
-            <span>年度折算</span>
-            <strong id="yearlySummary">暂无</strong>
-          </div>
-        </section>
+      <section class="metrics" aria-label="订阅概览">
+        <div class="metric tone-danger"><span>已过期</span><strong id="overdueCount">0</strong></div>
+        <div class="metric tone-warning"><span>今日续费</span><strong id="todayCount">0</strong></div>
+        <div class="metric tone-caution"><span>7日内续费</span><strong id="within7Count">0</strong></div>
+        <div class="metric tone-success"><span>启用订阅</span><strong id="enabledCount">0</strong></div>
+        <div class="metric tone-muted"><span>停用订阅</span><strong id="disabledCount">0</strong></div>
+        <div class="metric amount-card"><span>月度折算</span><strong id="monthlySummary">暂无</strong></div>
+        <div class="metric amount-card"><span>年度折算</span><strong id="yearlySummary">暂无</strong></div>
+      </section>
 
-        <section class="filters" aria-label="筛选">
-          <input id="searchInput" type="search" placeholder="搜索名称或备注">
-          <select id="categoryFilter" aria-label="分类筛选"></select>
-          <select id="enabledFilter" aria-label="状态筛选">
-            <option value="all">全部状态</option>
-            <option value="enabled">启用</option>
-            <option value="disabled">停用</option>
-          </select>
-        </section>
-
-        <section class="list-panel" aria-label="订阅列表">
-          <div id="subscriptionList" class="subscription-list"></div>
-          <div id="emptyList" class="empty-state hidden">
-            <strong>暂无订阅</strong>
-            <span>新增后会在这里按续费状态和日期排序。</span>
-          </div>
-        </section>
-      </aside>
-
-      <section class="detail">
-        <header class="toolbar">
-          <div>
-            <h2 id="formTitle">新增订阅</h2>
-            <p id="formHint">填写订阅信息后保存。</p>
-          </div>
-          <div class="toolbar-actions">
-            <button id="exportButton" class="secondary" type="button">导出</button>
-            <label class="secondary file-button">
-              导入
-              <input id="importInput" type="file" accept="application/json">
-            </label>
-          </div>
-        </header>
-
-        <section class="renewal-summary" aria-label="最近续费摘要">
+      <section class="dashboard-grid">
+        <section class="panel renewal-summary" aria-label="最近续费摘要">
           <div class="section-heading">
             <div>
-              <h3>最近续费</h3>
-              <p>优先显示已过期、今日续费和 7 日内续费。</p>
+              <h2>最近续费</h2>
+              <p>优先显示已过期、今日续费和 7 日内项目。</p>
             </div>
           </div>
           <div id="upcomingSummaryList" class="upcoming-summary-list"></div>
         </section>
 
-        <section class="calendar-panel" aria-label="续费日历视图">
+        <section class="panel calendar-panel" aria-label="续费日历视图">
           <div class="section-heading">
             <div>
-              <h3>续费日历</h3>
-              <p>轻量展示本月和下月的启用订阅。</p>
+              <h2>续费日历</h2>
+              <p>本月和下月即将发生的启用订阅。</p>
             </div>
           </div>
           <div class="calendar-grid">
             <div class="calendar-group">
-              <h4>本月续费</h4>
+              <h3>本月续费</h3>
               <div id="renewalCalendarCurrent" class="calendar-list"></div>
             </div>
             <div class="calendar-group">
-              <h4>下月续费</h4>
+              <h3>下月续费</h3>
               <div id="renewalCalendarNext" class="calendar-list"></div>
             </div>
           </div>
         </section>
-        <form id="subscriptionForm" class="editor-form">
-          <div class="form-grid">
-            <label>
-              <span>订阅名称</span>
-              <input id="nameInput" name="name" required placeholder="例如 iCloud+、Netflix、Notion">
-            </label>
+      </section>
 
-            <label>
-              <span>分类</span>
-              <select id="categoryInput" name="category"></select>
-            </label>
-
-            <label>
-              <span>金额</span>
-              <input id="amountInput" name="amount" type="number" min="0" step="0.01" placeholder="0.00">
-            </label>
-
-            <label>
-              <span>币种</span>
-              <select id="currencyInput" name="currency"></select>
-            </label>
-
-            <label>
-              <span>计费周期</span>
-              <select id="billingCycleInput" name="billingCycle"></select>
-            </label>
-
-            <label>
-              <span>开始日期</span>
-              <input id="startDateInput" name="startDate" type="date" required>
-            </label>
-
-            <label>
-              <span>下次续费日</span>
-              <input id="nextRenewalInput" name="nextRenewalDate" type="date" required>
-            </label>
-
-            <label class="check-row">
-              <input id="manualRenewalInput" name="manualRenewal" type="checkbox">
-              <span>手动指定续费日</span>
-            </label>
-
-            <label class="check-row">
-              <input id="enabledInput" name="enabled" type="checkbox" checked>
-              <span>启用此订阅</span>
-            </label>
+      <section class="panel subscriptions-panel" aria-label="订阅列表">
+        <div class="section-heading top-aligned">
+          <div>
+            <h2>订阅列表</h2>
+            <p>搜索、筛选和快速处理日常订阅。</p>
           </div>
+          <div class="import-export-actions">
+            <button id="exportButton" class="secondary" type="button">导出 JSON</button>
+            <label class="secondary file-button">普通导入<input id="importInput" type="file" accept="application/json"></label>
+          </div>
+        </div>
 
-          <label class="notes-field">
-            <span>备注</span>
-            <textarea id="notesInput" name="notes" rows="5" placeholder="可记录账号、套餐、取消入口等信息"></textarea>
-          </label>
-
-          <div class="form-actions">
-            <button id="deleteButton" class="danger hidden" type="button">删除</button>
-            <button id="resetButton" class="secondary" type="button">清空</button>
-            <button class="primary text-button" type="submit">保存</button>
-          </div>
-        </form>
-        <section class="backup-panel" aria-label="备份与恢复">
-          <div class="section-heading">
-            <div>
-              <h3>备份与恢复</h3>
-              <p>查看本地自动备份，预览后可恢复。</p>
-            </div>
-            <button id="refreshBackupsButton" class="secondary" type="button">刷新</button>
-          </div>
-          <div id="backupList" class="backup-list"></div>
-          <div id="emptyBackups" class="empty-state compact hidden">
-            <strong>暂无备份</strong>
-            <span>保存、导入或恢复订阅后会自动生成备份。</span>
-          </div>
-          <div id="backupPreview" class="backup-preview hidden"></div>
+        <section class="filters" aria-label="筛选与排序">
+          <input id="searchInput" type="search" placeholder="搜索名称、分类、备注或币种">
+          <select id="categoryFilter" aria-label="分类筛选"></select>
+          <select id="enabledFilter" aria-label="启用筛选">
+            <option value="all">全部启用状态</option>
+            <option value="enabled">启用</option>
+            <option value="disabled">停用</option>
+          </select>
+          <select id="statusFilter" aria-label="状态筛选"></select>
+          <select id="currencyFilter" aria-label="币种筛选"></select>
+          <select id="sortSelect" aria-label="排序">
+            <option value="default">默认排序</option>
+            <option value="renewal-asc">续费日从近到远</option>
+            <option value="renewal-desc">续费日从远到近</option>
+            <option value="amount-desc">金额从高到低</option>
+            <option value="amount-asc">金额从低到高</option>
+            <option value="name-asc">名称 A-Z</option>
+            <option value="updated-desc">最近更新</option>
+          </select>
         </section>
+
+        <div id="subscriptionList" class="subscription-list"></div>
+        <div id="emptyList" class="empty-state hidden"><strong>暂无订阅</strong><span>新增后会在这里按状态和续费日期排序。</span></div>
+      </section>
+
+      <section class="panel backup-panel" aria-label="备份与恢复">
+        <div class="section-heading top-aligned">
+          <div>
+            <h2>备份与恢复</h2>
+            <p>系统会在保存、导入和恢复前自动创建备份。建议定期下载备份 JSON 保存到其他位置。</p>
+          </div>
+          <div class="backup-toolbar">
+            <button id="manualBackupButton" class="primary" type="button">立即备份</button>
+            <button id="refreshBackupsButton" class="secondary" type="button">刷新</button>
+            <label class="secondary file-button">从外部备份恢复<input id="externalRestoreInput" type="file" accept="application/json"></label>
+          </div>
+        </div>
+        <div id="backupList" class="backup-list"></div>
+        <div id="emptyBackups" class="empty-state compact hidden"><strong>暂无备份</strong><span>保存、导入或恢复订阅后会自动生成备份。</span></div>
+        <button id="toggleBackupsButton" class="secondary hidden" type="button">显示全部</button>
+        <div id="backupPreview" class="backup-preview hidden"></div>
       </section>
     </main>
+
+    <dialog id="subscriptionDialog" class="subscription-dialog">
+      <form id="subscriptionForm" class="editor-form" method="dialog">
+        <header class="dialog-header">
+          <div>
+            <h2 id="formTitle">新增订阅</h2>
+            <p id="formHint">填写订阅信息后保存。</p>
+          </div>
+          <button id="closeDialogButton" class="icon-button" type="button" aria-label="关闭">×</button>
+        </header>
+        <div class="form-grid">
+          <label><span>订阅名称</span><input id="nameInput" name="name" required placeholder="例如 iCloud+、Netflix、Notion"></label>
+          <label><span>分类</span><select id="categoryInput" name="category"></select></label>
+          <label><span>金额</span><input id="amountInput" name="amount" type="number" min="0" step="0.01" placeholder="0.00"></label>
+          <label><span>币种</span><select id="currencyInput" name="currency"></select></label>
+          <label><span>计费周期</span><select id="billingCycleInput" name="billingCycle"></select></label>
+          <label><span>开始日期</span><input id="startDateInput" name="startDate" type="date" required></label>
+          <label><span>下次续费日</span><input id="nextRenewalInput" name="nextRenewalDate" type="date" required></label>
+          <label class="check-row"><input id="manualRenewalInput" name="manualRenewal" type="checkbox"><span>手动指定续费日</span></label>
+          <label class="check-row"><input id="enabledInput" name="enabled" type="checkbox" checked><span>启用此订阅</span></label>
+        </div>
+        <label class="notes-field"><span>备注</span><textarea id="notesInput" name="notes" rows="5" placeholder="可记录账号、套餐、取消入口等信息"></textarea></label>
+        <footer class="dialog-actions">
+          <button id="deleteButton" class="danger hidden" type="button">删除</button>
+          <span class="dialog-spacer"></span>
+          <button id="cancelButton" class="secondary" type="button">取消</button>
+          <button class="primary text-button" type="submit">保存</button>
+        </footer>
+      </form>
+    </dialog>
 
     <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
     <script type="module" src="/app.js"></script>

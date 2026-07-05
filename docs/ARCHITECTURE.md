@@ -5,8 +5,8 @@
 ## 运行时组成
 
 - `src/server.mjs`：提供 Node.js 原生 HTTP 服务、JSON API、静态资源服务、本地 JSON 持久化和自动备份触发。
-- `src/domain/subscriptions.mjs`：订阅领域逻辑，包括续费日期计算、续费状态、列表排序、筛选辅助和统计汇总。
-- `src/storage/backups.mjs`：本地备份文件命名、备份创建、列表读取、预览读取、安全文件名校验和保留策略。
+- `src/domain/subscriptions.mjs`：订阅领域逻辑，包括续费日期计算、续费状态、状态 metadata、列表排序、筛选辅助、续费推进和统计汇总。
+- `src/storage/backups.mjs`：本地备份文件命名、备份创建、手动备份、备份下载、列表读取、预览读取、安全文件名校验和保留策略。
 - `public/index.html`：页面结构。
 - `public/styles.css`：界面样式和窄窗口适配。
 - `public/app.js`：前端交互、表单、导入导出、列表渲染和统计展示。
@@ -65,6 +65,10 @@
 - 一次性：不计入周期性月度/年度折算，可作为一次性支出单独展示。
 - 多币种分别统计，不自动换算。
 
+## 状态色标体系
+
+Phase 4 将状态展示抽象为领域层 metadata 和前端统一 badge 样式。状态包括已过期、今日续费、3 日内、7 日内、本月内、正常、已停用、一次性。每个状态都有 label、tone、priority 和 description。前端订阅列表、最近续费摘要、续费日历复用同一套状态 class，不只依赖颜色，也保留文字标签。CSS 使用变量集中管理浅色和深色模式下的状态色。
+
 ## 续费日历
 
 续费日历由领域层 `renewalCalendarGroups()` 生成，只展示启用订阅，并按“本月续费”和“下月续费”分组。已过期订阅继续显示在最近续费摘要中，不强行塞入日历。
@@ -77,10 +81,17 @@
 - 超过数量时删除最旧备份。
 - `data/backups/` 不存在时自动创建。
 - 备份失败只记录服务端错误日志，不影响主保存流程。
-- 备份列表接口会跳过非受管理文件，只返回 `.json` 备份文件的安全文件名、时间、大小、订阅数量和有效性。
+- 备份列表接口会跳过非受管理文件，只返回 `.json` 备份文件的安全文件名、类型、时间、大小、订阅数量和有效性。
 - 损坏备份不会导致列表接口整体失败，但会标记为不可恢复。
 - 恢复前备份文件名为 `subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json`。
 - 导入前备份文件名为 `subscriptions-before-import-YYYY-MM-DD-HH-mm-ss.json`。
+- 手动备份文件名为 `subscriptions-manual-backup-YYYY-MM-DD-HH-mm-ss.json`。
+- 备份下载只允许读取受管理备份文件名，损坏备份也可下载。
+- 外部恢复通过 JSON body 传递订阅数组，不引入上传依赖。
+
+## 开源许可与免责声明
+
+项目使用 Apache License 2.0，根目录 `LICENSE` 保持标准许可证正文。额外风险提示、AS IS 声明、使用者和二创者责任边界放在 `DISCLAIMER.md`、`README.md` 和 `README.en.md` 中，不改写 Apache License 2.0 正文，也不增加与 Apache-2.0 授权冲突的限制条款。
 
 ## 文档与开源规则
 
