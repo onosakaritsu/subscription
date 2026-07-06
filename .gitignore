@@ -8,3 +8,10 @@ tmp/
 data/subscriptions.json
 data/backups/*.json
 .DS_Store
+
+*.log
+.env.*
+!.env.example
+.cache/
+playwright-report/
+test-results/

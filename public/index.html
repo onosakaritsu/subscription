@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>订阅管理</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
@@ -93,6 +94,7 @@
           </select>
         </section>
 
+        <div id="importPreview" class="import-preview hidden"></div>
         <div id="subscriptionList" class="subscription-list"></div>
         <div id="emptyList" class="empty-state hidden"><strong>暂无订阅</strong><span>新增后会在这里按状态和续费日期排序。</span></div>
       </section>
@@ -110,6 +112,7 @@
           </div>
         </div>
         <div id="backupDrillHint" class="backup-drill-hint">建议定期下载备份 JSON，并在恢复前通过预览功能确认备份内容。</div>
+        <div id="externalRestorePreview" class="import-preview hidden"></div>
         <div id="backupList" class="backup-list"></div>
         <div id="emptyBackups" class="empty-state compact hidden"><strong>暂无备份</strong><span>保存、导入或恢复订阅后会自动生成备份。</span></div>
         <button id="toggleBackupsButton" class="secondary hidden" type="button">显示全部</button>
@@ -126,6 +129,13 @@
         </div>
         <div id="integrityResult" class="integrity-result"></div>
       </section>
+
+      <footer class="app-footer" aria-label="版本与项目说明">
+        <span id="appVersion">版本 v1.0.0</span>
+        <a href="https://github.com/onosakaritsu/subscription/blob/main/LICENSE" target="_blank" rel="noreferrer">Apache-2.0</a>
+        <a href="https://github.com/onosakaritsu/subscription/blob/main/DISCLAIMER.md" target="_blank" rel="noreferrer">免责声明</a>
+        <a href="https://github.com/onosakaritsu/subscription/blob/main/PRIVACY.md" target="_blank" rel="noreferrer">隐私说明</a>
+      </footer>
     </main>
 
     <dialog id="subscriptionDialog" class="subscription-dialog">
