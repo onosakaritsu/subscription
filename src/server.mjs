@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, stat, writeFile, mkdir } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { basename, extname, join, normalize, resolve } from "node:path";
+import { appVersion } from "../public/version.js";
 import {
   backupDirectoryFor,
   createBeforeImportBackup,
@@ -32,7 +33,8 @@ const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml"
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon"
 };
 
 export function createApp(options = {}) {
@@ -76,7 +78,7 @@ async function routeRequest(request, response, context) {
 
 async function routeAPI(request, response, url, context) {
   if (request.method === "GET" && url.pathname === "/api/health") {
-    sendJSON(response, 200, { ok: true });
+    sendJSON(response, 200, { ok: true, version: appVersion });
     return;
   }
 
@@ -118,6 +120,13 @@ async function routeAPI(request, response, url, context) {
   if (request.method === "POST" && url.pathname === "/api/backups") {
     const result = await createManualBackupForDataFile(context.dataFile);
     sendJSON(response, 201, result);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/backups/restore-uploaded/preview") {
+    const textBody = await readTextBody(request);
+    const preview = await previewUploadedRestoreForDataFile(context.dataFile, textBody);
+    sendJSON(response, 200, preview);
     return;
   }
 
@@ -216,6 +225,13 @@ async function routeAPI(request, response, url, context) {
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/import/preview") {
+    const textBody = await readTextBody(request);
+    const preview = await previewImportJSONTextForDataFile(context.dataFile, textBody);
+    sendJSON(response, 200, preview);
+    return;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/import") {
     const textBody = await readTextBody(request);
     const result = await importJSONTextToDataFile(context.dataFile, textBody);
@@ -286,6 +302,13 @@ export async function sendBackupDownload(response, dataFile, fileName) {
     "Cache-Control": "no-store"
   });
   response.end(backup.content);
+}
+
+export async function previewUploadedRestoreForDataFile(dataFile, textBody, options = {}) {
+  return {
+    ...(await previewImportJSONTextForDataFile(dataFile, textBody, options)),
+    mode: "restore"
+  };
 }
 
 export async function restoreUploadedBackupToDataFile(dataFile, textBody, options = {}) {
@@ -371,6 +394,24 @@ export async function restoreBackupToDataFile(dataFile, fileName, options = {}) 
   };
 }
 
+export async function previewImportJSONTextForDataFile(dataFile, textBody, options = {}) {
+  const parsed = parseImportJSON(textBody);
+  const incomingItems = validateSubscriptionArray(parsed, options.now);
+  const currentItems = await loadItems(dataFile);
+  const sortedIncoming = sortForManagement(incomingItems);
+
+  return {
+    ok: true,
+    mode: "import",
+    currentCount: currentItems.length,
+    incomingCount: incomingItems.length,
+    diff: buildImportDiffSummary(currentItems, incomingItems),
+    previewItems: sortedIncoming.slice(0, 8),
+    items: sortedIncoming,
+    summary: summarizeSubscriptions(incomingItems)
+  };
+}
+
 export async function importJSONTextToDataFile(dataFile, textBody, options = {}) {
   const parsed = parseImportJSON(textBody);
   const items = validateSubscriptionArray(parsed, options.now);
@@ -382,6 +423,34 @@ export async function importJSONTextToDataFile(dataFile, textBody, options = {})
     summary: summarizeSubscriptions(items),
     beforeImportBackupFileName: basename(beforeImportBackup)
   };
+}
+
+export function buildImportDiffSummary(currentItems, incomingItems) {
+  const currentIds = new Set(currentItems.map((item) => item.id).filter(Boolean));
+  const incomingIds = new Set(incomingItems.map((item) => item.id).filter(Boolean));
+
+  return {
+    currentCount: currentItems.length,
+    incomingCount: incomingItems.length,
+    newCount: incomingItems.filter((item) => !currentIds.has(item.id)).length,
+    potentialUpdateCount: incomingItems.filter((item) => currentIds.has(item.id)).length,
+    missingCount: currentItems.filter((item) => !incomingIds.has(item.id)).length,
+    currentCurrencyDistribution: currencyDistribution(currentItems),
+    incomingCurrencyDistribution: currencyDistribution(incomingItems),
+    currentActiveCount: currentItems.filter((item) => item.isEnabled !== false).length,
+    currentInactiveCount: currentItems.filter((item) => item.isEnabled === false).length,
+    incomingActiveCount: incomingItems.filter((item) => item.isEnabled !== false).length,
+    incomingInactiveCount: incomingItems.filter((item) => item.isEnabled === false).length,
+    note: "差异按订阅 id 粗略判断；导入或恢复会用所选文件整体覆盖当前订阅数据。"
+  };
+}
+
+function currencyDistribution(items) {
+  return items.reduce((result, item) => {
+    const currency = String(item.currency || "UNKNOWN").toUpperCase();
+    result[currency] = (result[currency] || 0) + 1;
+    return result;
+  }, {});
 }
 
 export function parseImportJSON(textBody) {

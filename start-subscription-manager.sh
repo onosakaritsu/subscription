@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_DIR="/Users/kim/Documents/Workspace/Project_03_subscription-manager-web"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST_VALUE="${HOST:-127.0.0.1}"
 PORT_VALUE="${PORT:-5173}"
 
-cd "$PROJECT_DIR"
+cd "$SCRIPT_DIR"
 
 if ! command -v node >/dev/null 2>&1; then
   echo "未检测到 Node.js。请先安装 Node.js 20 或更新版本。"
@@ -21,7 +21,7 @@ fi
 
 if command -v lsof >/dev/null 2>&1; then
   if lsof -nP -iTCP:"$PORT_VALUE" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "端口 $PORT_VALUE 已被占用，请关闭占用进程或使用 PORT=其他端口 ./start-subscription-manager.sh"
+    echo "端口 $PORT_VALUE 已被占用。请关闭占用进程，或使用 PORT=其他端口 ./start-subscription-manager.sh"
     exit 1
   fi
 else

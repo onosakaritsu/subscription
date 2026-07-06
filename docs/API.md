@@ -13,7 +13,7 @@ http://127.0.0.1:5173
 返回：
 
 ```json
-{"ok":true}
+{"ok":true,"version":"1.0.0"}
 ```
 
 ## 获取订阅列表
@@ -83,6 +83,12 @@ http://127.0.0.1:5173
 subscriptions-export-YYYY-MM-DD.json
 ```
 
+## 导入预览
+
+`POST /api/import/preview`
+
+请求体必须是订阅对象数组。接口只解析、校验并返回预览和差异摘要，不修改 `data/subscriptions.json`，也不会创建备份。差异摘要包括当前订阅数、导入文件订阅数、将新增数量、可能覆盖/更新数量、可能删除或缺失数量、币种分布变化、启用/停用数量变化。
+
 ## 导入
 
 `POST /api/import`
@@ -150,11 +156,17 @@ subscriptions-before-restore-YYYY-MM-DD-HH-mm-ss.json
 
 恢复流程会先校验目标备份 JSON 和订阅数据结构。目标备份损坏或路径不合法时不会覆盖当前数据。
 
+## 从外部备份恢复预览
+
+`POST /api/backups/restore-uploaded/preview`
+
+通过 JSON body 传入订阅数组。接口只校验并返回预览和差异摘要，不覆盖当前数据。
+
 ## 从外部备份恢复
 
 `POST /api/backups/restore-uploaded`
 
-通过 JSON body 传入前端解析后的订阅数组，不使用 multipart 上传。服务端会再次校验结构，恢复前自动备份当前数据；失败时不会覆盖当前数据。
+通过 JSON body 传入前端解析后的订阅数组，不使用 multipart 上传。服务端会再次校验结构，恢复前自动备份当前数据；失败时不会覆盖当前数据。建议前端先调用 `/api/backups/restore-uploaded/preview` 展示预览，再由用户确认恢复。
 
 ## 许可证
 

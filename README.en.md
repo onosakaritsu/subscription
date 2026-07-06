@@ -4,6 +4,8 @@ A local-first personal subscription manager web app for tracking, summarizing, a
 
 Chinese documentation is the default GitHub README: [README.md](README.md).
 
+Current stable release: `v1.0.0`.
+
 ## Features
 
 - Add, edit, and delete subscriptions.
@@ -16,7 +18,7 @@ Chinese documentation is the default GitHub README: [README.md](README.md).
 - Multi-currency summaries without exchange-rate conversion.
 - Currency labels display symbol, ISO code, and Chinese name, such as `¥ / CNY / 人民币`.
 - Urgent renewal summary showing up to 5 enabled subscriptions.
-- JSON import and export.
+- JSON import and export with a preview and diff summary before replacing data.
 - Automatic local backups after every successful save, keeping the newest 20 backups.
 - Backup list, preview, and restore workflow in the web UI.
 - Before restoring or importing data, the current local data is backed up first.
@@ -24,7 +26,7 @@ Chinese documentation is the default GitHub README: [README.md](README.md).
 - Add/edit subscriptions now use a modal form.
 - Quick enable/disable, mark as renewed, and duplicate subscription actions.
 - Status filter, currency filter, and user-selectable sorting.
-- Manual backups, backup download, and restoring from an external backup JSON file.
+- Manual backups, backup download, and restoring from an external backup JSON file with a preview and diff summary.
 - Read-only data integrity checks for local JSON structure, dates, amounts, currencies, and duplicate ids.
 - Backup restore rehearsal hints that encourage downloading and previewing backups periodically.
 - ICS renewal calendar export for the next 12 months of enabled subscription events.
@@ -65,6 +67,16 @@ Open:
 http://127.0.0.1:5173
 ```
 
+## Screenshots
+
+v1.0.0 browser validation screenshots are stored in:
+
+```text
+docs/screenshots/v1.0.0/
+```
+
+Screenshots should use demo data and must not include personal subscription data.
+
 ## Data and Backups
 
 Main data file:
@@ -87,7 +99,7 @@ Phase 5 standardizes currency display as symbol, ISO code, and Chinese name, suc
 
 ## JSON Import and Export
 
-Exports download as `subscriptions-export-YYYY-MM-DD.json` and remain compatible with import. Import validates JSON format and subscription structure before replacing data.
+Exports download as `subscriptions-export-YYYY-MM-DD.json` and remain compatible with import. Import validates JSON format and subscription structure, shows a preview and diff summary, and only replaces data after confirmation.
 
 ## Status Badges
 
@@ -95,7 +107,7 @@ Phase 4 adds a unified visual status system for overdue, today, within 3 days, w
 
 ## Backup Restore
 
-The UI includes a backup and restore panel. It can list local backups, create a manual backup, preview a backup, download any backup JSON file, restore a selected valid backup after confirmation, and restore from an external backup JSON file. Damaged backups are shown but cannot be restored.
+The UI includes a backup and restore panel. It can list local backups, create a manual backup, preview a backup, download any backup JSON file, restore a selected valid backup after confirmation, and restore from an external backup JSON file after a preview and diff summary. Damaged backups are shown but cannot be restored.
 
 ## Renewal Calendar
 
@@ -125,7 +137,7 @@ npm test
 
 ## Screenshot Validation
 
-Phase 5 allows real-browser visual validation. Screenshots, if kept, should be stored under `docs/screenshots/phase5/` and must not include personal subscription data, browser caches, or tool dependencies.
+v1.0.0 uses real-browser visual validation. Screenshots are stored under `docs/screenshots/v1.0.0/` and must not include personal subscription data, browser caches, or tool dependencies.
 
 ## License and Disclaimer
 
@@ -135,4 +147,8 @@ This project is provided on an “AS IS” basis, without warranties or represen
 
 Users are solely responsible for determining whether this project is appropriate for their use case and assume all risks arising from the use, modification, derivative creation, redistribution, deployment, commercialization, or other use of this project and its derivative works. Any individual or organization that modifies, redistributes, deploys, or commercializes this project is solely responsible for ensuring compliance with applicable laws and regulations, third-party platform rules, data compliance requirements, and relevant open-source license obligations.
 
-This project does not constitute legal, compliance, financial, business, or professional advice. See [DISCLAIMER.md](./DISCLAIMER.md) for details.
+This project does not constitute legal, compliance, financial, business, or professional advice. See [DISCLAIMER.md](./DISCLAIMER.md) for details. Privacy behavior is described in [PRIVACY.md](./PRIVACY.md).
+
+## Privacy
+
+This app runs locally by default. Subscription data is stored in `data/subscriptions.json`, backups are stored in `data/backups/`, and the project itself does not include telemetry, tracking, or analytics. See [PRIVACY.md](./PRIVACY.md).

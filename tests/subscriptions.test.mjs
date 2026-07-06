@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { appVersion } from "../public/version.js";
 import { tmpdir } from "node:os";
 import {
   calculateNextRenewalDate,
@@ -40,11 +42,24 @@ import {
   getBackupPreview,
   getDataIntegrityReport,
   importJSONTextToDataFile,
+  previewImportJSONTextForDataFile,
+  previewUploadedRestoreForDataFile,
   restoreBackupToDataFile,
   restoreUploadedBackupToDataFile,
   renewSubscriptionById,
   updateSubscriptionEnabled
 } from "../src/server.mjs";
+
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+describe("release metadata", () => {
+  it("uses v1.0.0 in package metadata and the shared app version", async () => {
+    const packageJSON = JSON.parse(await readFile(join(projectRoot, "package.json"), "utf8"));
+    assert.equal(packageJSON.version, "1.0.0");
+    assert.equal(packageJSON.license, "Apache-2.0");
+    assert.equal(appVersion, "1.0.0");
+  });
+});
 
 describe("subscription domain", () => {
   it("calculates the next monthly renewal after the reference date", () => {
@@ -453,6 +468,40 @@ describe("subscription data backups", () => {
     assert.equal(data[0].name, "Current");
   });
 
+  it("previews import and uploaded restore diffs without overwriting current data", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-import-preview-"));
+    const dataFile = join(dir, "subscriptions.json");
+    const current = enabledItem("Current", "2026-07-08");
+    await writeFile(dataFile, JSON.stringify([current]), "utf8");
+
+    const incoming = [
+      { ...current, amount: 20 },
+      enabledItem("New", "2026-07-12")
+    ];
+    const preview = await previewImportJSONTextForDataFile(dataFile, JSON.stringify(incoming), { now: new Date(2026, 6, 5) });
+    const restorePreview = await previewUploadedRestoreForDataFile(dataFile, JSON.stringify(incoming), { now: new Date(2026, 6, 5) });
+
+    assert.equal(preview.mode, "import");
+    assert.equal(restorePreview.mode, "restore");
+    assert.equal(preview.diff.currentCount, 1);
+    assert.equal(preview.diff.incomingCount, 2);
+    assert.equal(preview.diff.newCount, 1);
+    assert.equal(preview.diff.potentialUpdateCount, 1);
+    assert.equal(preview.diff.missingCount, 0);
+    assert.deepEqual(preview.diff.currentCurrencyDistribution, { USD: 1 });
+    assert.equal(JSON.parse(await readFile(dataFile, "utf8"))[0].name, "Current");
+  });
+
+  it("rejects invalid preview JSON without overwriting current data", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "subscription-invalid-preview-"));
+    const dataFile = join(dir, "subscriptions.json");
+    await writeFile(dataFile, JSON.stringify([enabledItem("Current", "2026-07-08")]), "utf8");
+
+    await assert.rejects(() => previewImportJSONTextForDataFile(dataFile, "{broken"), /JSON 格式无效/);
+    await assert.rejects(() => previewUploadedRestoreForDataFile(dataFile, JSON.stringify({ bad: true })), /订阅数据结构不符合要求/);
+    assert.equal(JSON.parse(await readFile(dataFile, "utf8"))[0].name, "Current");
+  });
+
   it("creates a before-import backup and rejects invalid import JSON without overwriting current data", async () => {
     const dir = await mkdtemp(join(tmpdir(), "subscription-import-"));
     const dataFile = join(dir, "subscriptions.json");
@@ -484,7 +533,7 @@ describe("subscription data backups", () => {
 });
 
 describe("subscription http API", () => {
-  it("returns integrity and calendar ICS responses with expected headers", async () => {
+  it("returns health version static homepage favicon integrity and calendar responses", async () => {
     const dir = await mkdtemp(join(tmpdir(), "subscription-http-"));
     const dataFile = join(dir, "subscriptions.json");
     await writeFile(dataFile, JSON.stringify([
@@ -492,12 +541,46 @@ describe("subscription http API", () => {
       { ...enabledItem("Off", "2026-07-08"), isEnabled: false }
     ]), "utf8");
 
-    const server = createApp({ dataFile, publicDir: dir });
+    const server = createApp({ dataFile, publicDir: join(projectRoot, "public") });
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     const baseUrl = `http://127.0.0.1:${address.port}`;
 
     try {
+      const healthResponse = await fetch(baseUrl + "/api/health");
+      const health = await healthResponse.json();
+      assert.equal(healthResponse.status, 200);
+      assert.equal(health.ok, true);
+      assert.equal(health.version, "1.0.0");
+
+      const indexResponse = await fetch(baseUrl + "/");
+      const indexHTML = await indexResponse.text();
+      assert.equal(indexResponse.status, 200);
+      assert.equal(indexHTML.includes("/favicon.svg"), true);
+
+      const faviconResponse = await fetch(baseUrl + "/favicon.svg");
+      assert.equal(faviconResponse.status, 200);
+      assert.equal(faviconResponse.headers.get("content-type").startsWith("image/svg+xml"), true);
+
+      const importPreviewResponse = await fetch(baseUrl + "/api/import/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([enabledItem("Preview API", "2026-07-11")])
+      });
+      const importPreview = await importPreviewResponse.json();
+      assert.equal(importPreviewResponse.status, 200);
+      assert.equal(importPreview.diff.currentCount, 2);
+      assert.equal(importPreview.diff.incomingCount, 1);
+
+      const restorePreviewResponse = await fetch(baseUrl + "/api/backups/restore-uploaded/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify([enabledItem("Restore Preview API", "2026-07-12")])
+      });
+      const restorePreview = await restorePreviewResponse.json();
+      assert.equal(restorePreviewResponse.status, 200);
+      assert.equal(restorePreview.mode, "restore");
+
       const integrityResponse = await fetch(baseUrl + "/api/integrity");
       const integrity = await integrityResponse.json();
       assert.equal(integrityResponse.status, 200);

@@ -1,3 +1,4 @@
+import { appVersion } from "./version.js";
 const categories = ["影音娱乐", "效率工具", "云服务", "学习", "健康", "财务", "其他"];
 const currencyMetadata = {
   CNY: { code: "CNY", symbol: "¥", nameZh: "人民币", displayName: "¥ / CNY / 人民币", compactLabel: "¥" },
@@ -19,7 +20,8 @@ const statusOptions = [["all", "全部状态"], ["overdue", "已过期"], ["toda
 const statusClass = { disabled: "status-inactive", overdue: "status-overdue", today: "status-today", within3Days: "status-upcoming-3", within7Days: "status-upcoming-7", thisMonth: "status-this-month", normal: "status-normal", oneTime: "status-one-time" };
 const statusPriority = { overdue: 100, today: 95, within3Days: 90, within7Days: 80, thisMonth: 60, normal: 30, oneTime: 20, disabled: 10 };
 
-const state = { items: [], summary: null, calendar: { currentMonth: [], nextMonth: [] }, backups: [], integrity: null, showAllBackups: false, selectedId: null, filters: { search: "", category: "all", enabled: "all", status: "all", currency: "all", sort: "default" } };
+const state = { items: [], summary: null, calendar: { currentMonth: [], nextMonth: [] }, backups: [], integrity: null, showAllBackups: false, selectedId: null, pendingImport: null, pendingRestore: null, filters: { search: "", category: "all", enabled: "all", status: "all", currency: "all", sort: "default" } };
+let lastDialogTrigger = null;
 const els = Object.fromEntries([...document.querySelectorAll("[id]")].map((el) => [el.id, el]));
 
 init();
@@ -32,6 +34,7 @@ async function init() {
   fillSelect(els.statusFilter, statusOptions);
   fillSelect(els.currencyFilter, [["all", "全部币种"], ...currencySelectOptions()]);
   bindEvents();
+  if (els.appVersion) els.appVersion.textContent = `版本 v${appVersion}`;
   setBlankForm(false);
   await loadSubscriptions();
   await loadBackups();
@@ -39,7 +42,7 @@ async function init() {
 }
 
 function bindEvents() {
-  els.newButton.addEventListener("click", () => { setBlankForm(true); });
+  els.newButton.addEventListener("click", (event) => { setBlankForm(true, event.currentTarget); });
   els.closeDialogButton.addEventListener("click", closeDialog);
   els.cancelButton.addEventListener("click", closeDialog);
   els.deleteButton.addEventListener("click", deleteSelected);
@@ -47,6 +50,8 @@ function bindEvents() {
   els.exportButton.addEventListener("click", exportJSON);
   els.importInput.addEventListener("change", importJSON);
   els.externalRestoreInput.addEventListener("change", restoreExternalBackup);
+  els.importPreview.addEventListener("click", handleImportPreviewAction);
+  els.externalRestorePreview.addEventListener("click", handleExternalRestorePreviewAction);
   els.manualBackupButton.addEventListener("click", createManualBackup);
   els.calendarExportButton.addEventListener("click", exportICS);
   els.integrityButton.addEventListener("click", checkIntegrity);
@@ -54,6 +59,7 @@ function bindEvents() {
   els.backupList.addEventListener("click", handleBackupAction);
   els.toggleBackupsButton.addEventListener("click", () => { state.showAllBackups = !state.showAllBackups; renderBackups(); });
   els.subscriptionList.addEventListener("click", handleSubscriptionAction);
+  els.subscriptionDialog.addEventListener("cancel", handleDialogCancel);
 
   for (const id of ["searchInput", "categoryFilter", "enabledFilter", "statusFilter", "currencyFilter", "sortSelect"]) {
     els[id].addEventListener(id === "searchInput" ? "input" : "change", () => {
@@ -147,6 +153,7 @@ function filteredItems() {
   return filtered.sort((a, b) => compareItems(a, b, f.sort));
 }
 function compareItems(a, b, sort) {
+  if (sort === "renewal-asc") return a.nextRenewalDate.localeCompare(b.nextRenewalDate) || a.name.localeCompare(b.name, "zh-Hans-CN");
   if (sort === "renewal-desc") return b.nextRenewalDate.localeCompare(a.nextRenewalDate) || a.name.localeCompare(b.name, "zh-Hans-CN");
   if (sort === "amount-desc") return Number(b.amount || 0) - Number(a.amount || 0) || a.name.localeCompare(b.name, "zh-Hans-CN");
   if (sort === "amount-asc") return Number(a.amount || 0) - Number(b.amount || 0) || a.name.localeCompare(b.name, "zh-Hans-CN");
@@ -159,14 +166,26 @@ async function handleSubscriptionAction(event) {
   if (!button) return;
   const item = state.items.find((entry) => entry.id === button.dataset.id);
   if (!item) return;
-  if (button.dataset.action === "edit") { fillForm(item); openDialog(); return; }
-  if (button.dataset.action === "copy") { fillForm({ ...copyDraft(item), id: null }); state.selectedId = null; els.formTitle.textContent = "复制订阅"; openDialog(); return; }
+  if (button.dataset.action === "edit") { fillForm(item); openDialog(button); return; }
+  if (button.dataset.action === "copy") { fillForm({ ...copyDraft(item), id: null }); state.selectedId = null; els.formTitle.textContent = "复制订阅"; openDialog(button); return; }
   if (button.dataset.action === "delete") { state.selectedId = item.id; await deleteSelected(); return; }
   if (button.dataset.action === "toggle") { await toggleSubscription(item); return; }
   if (button.dataset.action === "renew") { await confirmRenew(item); }
 }
-function openDialog() { els.subscriptionDialog.showModal(); }
-function closeDialog() { els.subscriptionDialog.close(); }
+function openDialog(trigger = document.activeElement) {
+  lastDialogTrigger = trigger;
+  els.subscriptionDialog.showModal();
+  window.setTimeout(() => els.nameInput.focus(), 0);
+}
+function closeDialog() {
+  if (els.subscriptionDialog.open) els.subscriptionDialog.close();
+  if (lastDialogTrigger?.focus) lastDialogTrigger.focus();
+  lastDialogTrigger = null;
+}
+function handleDialogCancel(event) {
+  event.preventDefault();
+  if (confirm("关闭弹窗将放弃未保存修改，确认关闭吗？")) closeDialog();
+}
 function fillForm(item) {
   state.selectedId = item.id || null;
   els.formTitle.textContent = state.selectedId ? "编辑订阅" : "新增订阅";
@@ -174,7 +193,7 @@ function fillForm(item) {
   els.nameInput.value = item.name || ""; els.categoryInput.value = item.category || "效率工具"; els.amountInput.value = item.amount ?? 0; els.currencyInput.value = item.currency || "CNY"; els.billingCycleInput.value = item.billingCycle || "monthly"; els.startDateInput.value = item.startDate || localDateISO(); els.nextRenewalInput.value = item.nextRenewalDate || calculateNextRenewalDate(els.startDateInput.value, els.billingCycleInput.value); els.manualRenewalInput.checked = Boolean(item.isRenewalDateManuallyAdjusted); els.enabledInput.checked = item.isEnabled !== false; els.notesInput.value = item.notes || "";
   els.deleteButton.classList.toggle("hidden", !state.selectedId);
 }
-function setBlankForm(open = false) { const today = localDateISO(); fillForm({ name: "", category: "效率工具", amount: 0, currency: "CNY", billingCycle: "monthly", startDate: today, nextRenewalDate: calculateNextRenewalDate(today, "monthly"), isEnabled: true, notes: "" }); if (open) openDialog(); }
+function setBlankForm(open = false, trigger = document.activeElement) { const today = localDateISO(); fillForm({ name: "", category: "效率工具", amount: 0, currency: "CNY", billingCycle: "monthly", startDate: today, nextRenewalDate: calculateNextRenewalDate(today, "monthly"), isEnabled: true, notes: "" }); if (open) openDialog(trigger); }
 async function saveForm(event) {
   event.preventDefault();
   const path = state.selectedId ? "/api/subscriptions/" + encodeURIComponent(state.selectedId) : "/api/subscriptions";
@@ -198,16 +217,97 @@ function copyDraft(item) { return { ...item, name: `${item.name || "未命名订
 
 async function exportJSON() { const response = await fetch("/api/export"); const blob = await response.blob(); downloadBlob(blob, exportFileName()); }
 async function exportICS() { if (!state.items.some((item) => item.isEnabled)) { showToast("没有可导出的启用订阅", true); return; } const response = await fetch("/api/calendar.ics"); if (!response.ok) { showToast("续费日历导出失败", true); return; } downloadBlob(await response.blob(), "subscriptions-renewals.ics"); }
-async function importJSON() { const file = els.importInput.files?.[0]; if (!file) return; try { const json = await readJSONFile(file); const result = await api("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) }); showToast("已导入 " + result.items.length + " 项订阅"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch (error) { showToast(error.message || "导入失败，当前数据未被修改", true); } finally { els.importInput.value = ""; } }
-async function restoreExternalBackup() { const file = els.externalRestoreInput.files?.[0]; if (!file) return; try { const json = await readJSONFile(file); if (!confirm("恢复前会自动备份当前数据。确认要使用所选文件覆盖当前订阅数据吗？")) return; const result = await api("/api/backups/restore-uploaded", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(json) }); showToast("已从外部备份恢复订阅数据"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch (error) { showToast(error.message || "恢复失败，请检查备份文件或查看服务端日志", true); } finally { els.externalRestoreInput.value = ""; } }
-async function readJSONFile(file) { const text = await file.text(); try { return JSON.parse(text); } catch { throw new Error("JSON 格式无效"); } }
+async function importJSON() {
+  const file = els.importInput.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const preview = await api("/api/import/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+    state.pendingImport = { text, fileName: file.name, preview };
+    renderImportPreview();
+    showToast("已生成导入预览");
+  } catch (error) {
+    state.pendingImport = null;
+    renderImportPreview();
+    showToast(error.message || "导入预览失败，当前数据未被修改", true);
+  } finally {
+    els.importInput.value = "";
+  }
+}
+async function restoreExternalBackup() {
+  const file = els.externalRestoreInput.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const preview = await api("/api/backups/restore-uploaded/preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: text });
+    state.pendingRestore = { text, fileName: file.name, preview };
+    renderExternalRestorePreview();
+    showToast("已生成外部备份恢复预览");
+  } catch (error) {
+    state.pendingRestore = null;
+    renderExternalRestorePreview();
+    showToast(error.message || "恢复预览失败，当前数据未被修改", true);
+  } finally {
+    els.externalRestoreInput.value = "";
+  }
+}
+async function confirmImportPreview() {
+  if (!state.pendingImport) return;
+  if (!confirm("导入将使用所选文件覆盖当前订阅数据。导入前系统会自动备份当前数据。确认继续吗？")) return;
+  try {
+    const result = await api("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: state.pendingImport.text });
+    showToast("已导入 " + result.items.length + " 项订阅");
+    state.pendingImport = null;
+    renderImportPreview();
+    await loadSubscriptions(result.items[0]?.id ?? null);
+    await loadBackups();
+  } catch (error) {
+    showToast(error.message || "导入失败，当前数据未被修改", true);
+  }
+}
+async function confirmExternalRestorePreview() {
+  if (!state.pendingRestore) return;
+  if (!confirm("恢复将使用所选文件覆盖当前订阅数据。恢复前系统会自动备份当前数据。确认继续吗？")) return;
+  try {
+    const result = await api("/api/backups/restore-uploaded", { method: "POST", headers: { "Content-Type": "application/json" }, body: state.pendingRestore.text });
+    showToast("已从外部备份恢复订阅数据");
+    state.pendingRestore = null;
+    renderExternalRestorePreview();
+    await loadSubscriptions(result.items[0]?.id ?? null);
+    await loadBackups();
+  } catch (error) {
+    showToast(error.message || "恢复失败，请检查备份文件或查看服务端日志", true);
+  }
+}
+function handleImportPreviewAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "confirm-import") return confirmImportPreview();
+  if (button.dataset.action === "cancel-import") { state.pendingImport = null; renderImportPreview(); }
+}
+function handleExternalRestorePreviewAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "confirm-restore") return confirmExternalRestorePreview();
+  if (button.dataset.action === "cancel-restore") { state.pendingRestore = null; renderExternalRestorePreview(); }
+}
 async function createManualBackup() { try { await api("/api/backups", { method: "POST" }); showToast("已创建手动备份"); await loadBackups(); } catch { showToast("手动备份失败，请查看服务端日志", true); } }
 async function loadBackups() { const data = await api("/api/backups"); state.backups = data.backups || []; renderBackups(); renderBackupDrillHint(); }
 function renderBackups() { const backups = state.showAllBackups ? state.backups : state.backups.slice(0, 10); els.backupList.innerHTML = backups.map(renderBackupRow).join(""); els.emptyBackups.classList.toggle("hidden", state.backups.length > 0); els.toggleBackupsButton.classList.toggle("hidden", state.backups.length <= 10); els.toggleBackupsButton.textContent = state.showAllBackups ? "收起" : "显示全部"; }
 function renderBackupDrillHint() { if (!els.backupDrillHint) return; if (!state.backups.length) { els.backupDrillHint.textContent = "当前还没有可用备份。建议先点击“立即备份”。"; els.backupDrillHint.className = "backup-drill-hint tone-caution"; return; } const latest = state.backups[0]; const days = Math.floor((Date.now() - new Date(latest.createdAt).getTime()) / 86400000); if (days > 30) { els.backupDrillHint.textContent = "最近一次备份已超过 30 天，建议创建新的手动备份。"; els.backupDrillHint.className = "backup-drill-hint tone-caution"; return; } els.backupDrillHint.textContent = "建议定期下载备份 JSON，并在恢复前通过预览功能确认备份内容。"; els.backupDrillHint.className = "backup-drill-hint"; }
 function renderBackupRow(backup) { return `<div class="backup-item"><div class="backup-main"><strong>${escapeHTML(backup.type?.label || "自动备份")} · ${escapeHTML(formatDateTime(backup.createdAt))}</strong><span>${escapeHTML(backup.fileName)}</span></div><div class="backup-meta"><span>${escapeHTML(formatFileSize(backup.size))}</span><span>${escapeHTML(String(backup.subscriptionCount || 0) + " 项")}</span>${backup.isValid === false ? '<span class="backup-invalid">不可恢复</span>' : '<span class="backup-valid">可恢复</span>'}</div><div class="backup-actions"><button class="secondary" type="button" data-action="preview" data-file="${escapeHTML(backup.fileName)}">预览</button><button class="secondary" type="button" data-action="download" data-file="${escapeHTML(backup.fileName)}">下载</button><button class="danger" type="button" data-action="restore" data-file="${escapeHTML(backup.fileName)}" ${backup.isValid === false ? "disabled" : ""}>恢复</button></div></div>`; }
 async function handleBackupAction(event) { const button = event.target.closest("button[data-action]"); if (!button) return; const fileName = button.dataset.file; if (button.dataset.action === "preview") return previewBackup(fileName); if (button.dataset.action === "download") return downloadBackup(fileName); if (button.dataset.action === "restore") return restoreBackup(fileName); }
-async function previewBackup(fileName) { try { const backup = await api("/api/backups/" + encodeURIComponent(fileName)); els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = `<div class="preview-heading"><strong>备份预览</strong><span>${escapeHTML(backup.fileName)} · ${escapeHTML(String(backup.subscriptionCount || 0) + " 项")}</span></div>${(backup.subscriptions || []).slice(0, 8).map((item) => `<div class="preview-row"><strong>${escapeHTML(item.name || "未命名订阅")}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(formatCurrencyAmount(item.amount, item.currency))}</span></div>`).join("") || '<div class="empty-state compact"><strong>空备份</strong><span>该备份内没有订阅。</span></div>'}`; } catch { els.backupPreview.classList.remove("hidden"); els.backupPreview.innerHTML = '<strong>无法预览该备份</strong><span>备份文件可能已损坏。</span>'; } }
+async function previewBackup(fileName) {
+  try {
+    const backup = await api("/api/backups/" + encodeURIComponent(fileName));
+    const stats = summarizePreviewItems(backup.subscriptions || []);
+    els.backupPreview.classList.remove("hidden");
+    els.backupPreview.innerHTML = `<div class="preview-heading"><strong>内部备份预览</strong><span>${escapeHTML(backup.type?.label || "备份")} · ${escapeHTML(formatDateTime(backup.createdAt))}</span><span>${escapeHTML(backup.fileName)}</span></div>${renderPreviewStats(stats, backup.subscriptionCount || 0)}${renderPreviewItems(backup.subscriptions || [])}`;
+  } catch {
+    els.backupPreview.classList.remove("hidden");
+    els.backupPreview.innerHTML = '<strong>无法预览该备份</strong><span>备份文件可能已损坏。</span>';
+  }
+}
 async function downloadBackup(fileName) { const response = await fetch("/api/backups/" + encodeURIComponent(fileName) + "/download"); if (!response.ok) { showToast("备份下载失败", true); return; } downloadBlob(await response.blob(), fileName); }
 async function restoreBackup(fileName) { if (!confirm("恢复前会自动备份当前数据。确认要使用该备份覆盖当前订阅数据吗？")) return; try { const result = await api("/api/backups/" + encodeURIComponent(fileName) + "/restore", { method: "POST" }); showToast("已从备份恢复订阅数据"); await loadSubscriptions(result.items[0]?.id ?? null); await loadBackups(); } catch { showToast("恢复失败，请检查备份文件或查看服务端日志", true); } }
 
@@ -222,10 +322,70 @@ function renderIntegrity() {
   const tone = s.errors ? "tone-danger" : s.warnings ? "tone-caution" : "tone-success";
   const headline = s.errors ? "发现错误" : s.warnings ? "发现警告" : "正常";
   const issues = report.issues || [];
-  els.integrityResult.innerHTML = `<div class="integrity-summary ${tone}"><strong>${headline}</strong><span>总计 ${s.total || 0} 项 · 有效 ${s.valid || 0} 项 · 警告 ${s.warnings || 0} · 错误 ${s.errors || 0}</span><span>检查时间 ${escapeHTML(formatDateTime(report.checkedAt))}</span></div>${issues.length ? `<div class="integrity-issues">${issues.map(renderIntegrityIssue).join("")}</div>` : '<div class="empty-state compact"><strong>当前数据未发现明显异常</strong><span>完整性检查不会自动修改你的数据。</span></div>'}`;
+  const guidance = s.errors ? "请先导出备份，再根据提示修正数据。" : s.warnings ? "警告不会阻止使用，但建议检查。" : "完整性检查不会自动修改你的数据。";
+  const visibleIssues = issues.slice(0, 20);
+  const moreText = issues.length > visibleIssues.length ? `<div class="preview-note">还有 ${issues.length - visibleIssues.length} 条问题未展开显示。</div>` : "";
+  els.integrityResult.innerHTML = `<div class="integrity-summary ${tone}"><strong>${headline}</strong><span>总计 ${s.total || 0} 项 · 有效 ${s.valid || 0} 项 · 警告 ${s.warnings || 0} · 错误 ${s.errors || 0}</span><span>检查时间 ${escapeHTML(formatDateTime(report.checkedAt))}</span><span>${escapeHTML(guidance)}</span></div>${issues.length ? `<div class="integrity-issues">${visibleIssues.map(renderIntegrityIssue).join("")}${moreText}</div>` : '<div class="empty-state compact"><strong>当前数据未发现明显异常</strong><span>完整性检查不会自动修改你的数据。</span></div>'}`;
 }
-function renderIntegrityIssue(issue) { const tone = issue.level === "error" ? "status-overdue" : "status-upcoming-7"; return `<div class="integrity-issue"><span class="status-badge ${tone}">${escapeHTML(issue.level === "error" ? "错误" : "警告")}</span><strong>${escapeHTML(issue.subscriptionName || issue.subscriptionId || "未命名订阅")}</strong><span>${escapeHTML(issue.message || issue.type)}</span></div>`; }
+function renderIntegrityIssue(issue) { const tone = issue.level === "error" ? "status-overdue" : "status-upcoming-7"; return `<div class="integrity-issue"><span class="status-badge ${tone}">${escapeHTML(issue.level === "error" ? "错误" : "警告")}</span><strong>${escapeHTML(issue.subscriptionName || issue.subscriptionId || "未命名订阅")}</strong><span class="issue-type">${escapeHTML(issue.type || "unknown")}</span><span>${escapeHTML(issue.message || issue.type)}</span></div>`; }
 
+function renderImportPreview() {
+  renderPendingPreview(els.importPreview, state.pendingImport, "导入预览", "普通 JSON 导入", "confirm-import", "确认导入", "cancel-import");
+}
+function renderExternalRestorePreview() {
+  renderPendingPreview(els.externalRestorePreview, state.pendingRestore, "外部备份恢复预览", "从外部备份恢复", "confirm-restore", "确认恢复", "cancel-restore");
+}
+function renderPendingPreview(container, pending, title, modeLabel, confirmAction, confirmText, cancelAction) {
+  if (!pending) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+    return;
+  }
+  const preview = pending.preview || {};
+  container.classList.remove("hidden");
+  container.innerHTML = `<div class="preview-heading"><strong>${escapeHTML(title)}</strong><span>${escapeHTML(modeLabel)} · ${escapeHTML(pending.fileName || "未命名文件")}</span></div>${renderDiffSummary(preview.diff || {})}${renderPreviewItems(preview.previewItems || preview.items || [])}<div class="preview-actions"><button class="primary" type="button" data-action="${confirmAction}">${escapeHTML(confirmText)}</button><button class="secondary" type="button" data-action="${cancelAction}">取消</button></div>`;
+}
+function renderDiffSummary(diff) {
+  const rows = [
+    ["当前订阅数", diff.currentCount ?? 0],
+    ["导入/恢复文件订阅数", diff.incomingCount ?? 0],
+    ["将新增数量", diff.newCount ?? 0],
+    ["可能覆盖/更新数量", diff.potentialUpdateCount ?? 0],
+    ["可能删除或缺失数量", diff.missingCount ?? 0],
+    ["当前启用/停用", `${diff.currentActiveCount ?? 0} / ${diff.currentInactiveCount ?? 0}`],
+    ["导入启用/停用", `${diff.incomingActiveCount ?? 0} / ${diff.incomingInactiveCount ?? 0}`],
+    ["当前币种分布", formatDistribution(diff.currentCurrencyDistribution)],
+    ["导入币种分布", formatDistribution(diff.incomingCurrencyDistribution)]
+  ];
+  return `<div class="preview-summary-grid">${rows.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join("")}</div><div class="preview-note">${escapeHTML(diff.note || "导入或恢复前请确认预览内容。")}</div>`;
+}
+function renderPreviewStats(stats, count) {
+  const rows = [
+    ["订阅数量", count],
+    ["启用/停用", `${stats.active} / ${stats.inactive}`],
+    ["币种分布", formatDistribution(stats.currencies)]
+  ];
+  return `<div class="preview-summary-grid compact">${rows.map(([label, value]) => `<div><span>${escapeHTML(label)}</span><strong>${escapeHTML(value)}</strong></div>`).join("")}</div>`;
+}
+function renderPreviewItems(items) {
+  if (!items.length) return '<div class="empty-state compact"><strong>空文件</strong><span>该文件内没有订阅。</span></div>';
+  return `<div class="preview-items">${items.slice(0, 8).map((item) => `<div class="preview-row"><strong>${escapeHTML(item.name || "未命名订阅")}</strong><span>${escapeHTML(formatDate(item.nextRenewalDate))} · ${escapeHTML(formatCurrencyAmount(item.amount, item.currency))} · ${escapeHTML(item.isEnabled === false ? "停用" : "启用")}</span></div>`).join("")}${items.length > 8 ? `<div class="preview-note">仅显示前 8 条，共 ${items.length} 条。</div>` : ""}</div>`;
+}
+function summarizePreviewItems(items) {
+  return {
+    active: items.filter((item) => item.isEnabled !== false).length,
+    inactive: items.filter((item) => item.isEnabled === false).length,
+    currencies: items.reduce((result, item) => {
+      const currency = normalizeCurrencyCode(item.currency) || "UNKNOWN";
+      result[currency] = (result[currency] || 0) + 1;
+      return result;
+    }, {})
+  };
+}
+function formatDistribution(distribution = {}) {
+  const entries = Object.entries(distribution);
+  return entries.length ? entries.map(([currency, count]) => `${formatCurrencyMetaLabel(currency)} ${count}`).join("；") : "无";
+}
 async function api(path, options = {}) { const response = await fetch(path, options); const data = await response.json().catch(() => ({})); if (!response.ok) { throw new Error(data.error || "请求失败"); } return data; }
 function downloadBlob(blob, fileName) { const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = fileName; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url); }
 function renderStatusBadge(item) { const status = item.renewalStatus || { key: item.isEnabled ? "normal" : "disabled", label: item.isEnabled ? "正常" : "已停用" }; return `<span class="status-badge ${statusClassFor(item)}" title="${escapeHTML(status.description || status.label)}">${escapeHTML(status.label)}</span>`; }

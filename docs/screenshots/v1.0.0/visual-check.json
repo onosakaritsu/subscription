@@ -1,0 +1,67 @@
+[
+  {
+    "name": "desktop-home.png",
+    "overflow": {
+      "innerWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": []
+  },
+  {
+    "name": "narrow-home.png",
+    "overflow": {
+      "innerWidth": 420,
+      "scrollWidth": 420,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": []
+  },
+  {
+    "name": "modal-420.png",
+    "overflow": {
+      "innerWidth": 420,
+      "scrollWidth": 420,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": [],
+    "dialogOpen": true
+  },
+  {
+    "name": "import-preview.png",
+    "overflow": {
+      "innerWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": []
+  },
+  {
+    "name": "integrity.png",
+    "overflow": {
+      "innerWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": []
+  },
+  {
+    "name": "backups.png",
+    "overflow": {
+      "innerWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": [],
+    "backupPreview": true
+  },
+  {
+    "name": "dark-home.png",
+    "overflow": {
+      "innerWidth": 1280,
+      "scrollWidth": 1280,
+      "hasHorizontalOverflow": false
+    },
+    "consoleErrors": []
+  }
+]
